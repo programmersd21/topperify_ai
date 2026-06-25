@@ -1,5 +1,7 @@
 # Topperify AI
 
+![Topperify AI](image.png)
+
 Turn any PDF into comprehensive, deeply detailed study notes. Upload a textbook chapter, research paper, or class notes, and get full-spectrum learning material with definitions, formulas, worked examples, mind maps, flashcards, and revision sheets - all beautifully rendered and downloadable.
 
 ## Features
@@ -86,7 +88,11 @@ streamlit run streamlit_app.py
 
 ## Deployment
 
-Push to GitHub and deploy on [Streamlit Community Cloud](https://share.streamlit.io). No config files needed - the app handles everything through the sidebar.
+Push to GitHub and deploy on [Streamlit Community Cloud](https:s//share.streamlit.io). No config files needed - the app handles everything through the sidebar.
+
+## Pre-existing Deployment
+
+https://topperify.streamlit.app/
 
 ## License
 
