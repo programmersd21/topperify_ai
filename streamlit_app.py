@@ -83,18 +83,15 @@ MODEL_COOKIE = "topperify_model"
 
 cookie_manager = stx.CookieManager(key="cookie_mgr")
 
-# Load cookies once per session
+# Load cookies once per session when ready
 if "cookies_loaded" not in st.session_state:
-    st.session_state["cookies_loaded"] = True
-    try:
-        cookies = cookie_manager.get_all()
-        if cookies:
-            if COOKIE_NAME in cookies:
-                st.session_state["gemini_api_key"] = cookies[COOKIE_NAME]
-            if MODEL_COOKIE in cookies:
-                st.session_state["selected_model"] = cookies[MODEL_COOKIE]
-    except:
-        pass
+    cookies = cookie_manager.get_all()
+    if cookies:
+        st.session_state["cookies_loaded"] = True
+        if COOKIE_NAME in cookies:
+            st.session_state["gemini_api_key"] = cookies[COOKIE_NAME]
+        if MODEL_COOKIE in cookies:
+            st.session_state["selected_model"] = cookies[MODEL_COOKIE]
 
 MODEL_OPTIONS = {
     "gemini-3.1-flash-lite (Fastest)": "gemini-3.1-flash-lite",
