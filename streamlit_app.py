@@ -95,11 +95,9 @@ def load_api_key() -> str:
     if st.session_state.get("gemini_api_key"):
         return st.session_state["gemini_api_key"]
     
-    if not cookie_manager.ready():
-        return ""
-    
-    key = cookie_manager.get(COOKIE_NAME)
-    if key:
+    cookies = cookie_manager.get_all()
+    if cookies and COOKIE_NAME in cookies:
+        key = cookies[COOKIE_NAME]
         st.session_state["gemini_api_key"] = key
         return key
     return ""
@@ -108,16 +106,14 @@ def load_api_key() -> str:
 def save_api_key(key: str):
     """Save API key to session state + browser cookie (30-day expiry)."""
     st.session_state["gemini_api_key"] = key
-    if cookie_manager.ready():
-        cookie_manager.set(COOKIE_NAME, key, expires_at=datetime.now() + timedelta(days=30))
+    cookie_manager.set(COOKIE_NAME, key, expires_at=datetime.now() + timedelta(days=30))
 
 
 def delete_api_key():
     """Remove the stored API key from session state + cookie."""
     st.session_state["gemini_api_key"] = ""
     st.session_state["editing_key"] = False
-    if cookie_manager.ready():
-        cookie_manager.delete(COOKIE_NAME)
+    cookie_manager.delete(COOKIE_NAME)
 
 
 def load_model_choice() -> str:
@@ -125,11 +121,9 @@ def load_model_choice() -> str:
     if st.session_state.get("selected_model"):
         return st.session_state["selected_model"]
     
-    if not cookie_manager.ready():
-        return "gemini-3.1-flash-lite"
-    
-    model = cookie_manager.get(MODEL_COOKIE)
-    if model:
+    cookies = cookie_manager.get_all()
+    if cookies and MODEL_COOKIE in cookies:
+        model = cookies[MODEL_COOKIE]
         st.session_state["selected_model"] = model
         return model
     return "gemini-3.1-flash-lite"
@@ -138,8 +132,7 @@ def load_model_choice() -> str:
 def save_model_choice(model_key: str):
     """Save model choice to cookie + session state."""
     st.session_state["selected_model"] = model_key
-    if cookie_manager.ready():
-        cookie_manager.set(MODEL_COOKIE, model_key, expires_at=datetime.now() + timedelta(days=30))
+    cookie_manager.set(MODEL_COOKIE, model_key, expires_at=datetime.now() + timedelta(days=30))
 
 
 # API Key - Sidebar UI
