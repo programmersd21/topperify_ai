@@ -93,26 +93,22 @@ div[data-testid='element-container']:has(iframe[title='streamlit_cookies_control
 </style>
 """)
 
-# Try to load cookies - may need multiple attempts on first load
-if "_cookies_retry" not in st.session_state:
-    st.session_state["_cookies_retry"] = 0
-
-cookies = controller.getAll()
+# Load cookies with proper null handling
+cookies = controller.getAll() or {}
 time.sleep(1)
 
-# If cookies is None/empty and we haven't retried yet, trigger a rerun
-if not cookies and st.session_state["_cookies_retry"] < 2:
-    st.session_state["_cookies_retry"] += 1
-    time.sleep(1)
-    st.rerun()
+# Debug info (remove after testing)
+# st.sidebar.write("Cookie Debug:", cookies)
+# st.sidebar.write("Session key:", st.session_state.get("gemini_api_key"))
 
-# Reset retry counter on successful cookie load
-if cookies:
-    st.session_state["_cookies_retry"] = 0
-    if COOKIE_NAME in cookies and "gemini_api_key" not in st.session_state:
-        st.session_state["gemini_api_key"] = cookies[COOKIE_NAME]
-    if MODEL_COOKIE in cookies and "selected_model" not in st.session_state:
-        st.session_state["selected_model"] = cookies[MODEL_COOKIE]
+# Load from cookies into session state if not already present
+saved_key = cookies.get(COOKIE_NAME)
+if saved_key and "gemini_api_key" not in st.session_state:
+    st.session_state["gemini_api_key"] = saved_key
+
+saved_model = cookies.get(MODEL_COOKIE)
+if saved_model and "selected_model" not in st.session_state:
+    st.session_state["selected_model"] = saved_model
 
 MODEL_OPTIONS = {
     "gemini-3.1-flash-lite (Fastest)": "gemini-3.1-flash-lite",
@@ -219,6 +215,7 @@ with st.sidebar:
             if st.button("Save New Key", type="primary", use_container_width=True):
                 if new_key.strip():
                     save_api_key(new_key.strip())
+                    time.sleep(1)  # Wait for cookie to be written
                     st.session_state["editing_key"] = False
                     st.rerun()
                 else:
@@ -252,6 +249,7 @@ with st.sidebar:
             if entered_key.strip():
                 if remember:
                     save_api_key(entered_key.strip())
+                    time.sleep(1)  # Wait for cookie to be written
                     st.success("Key saved to your browser!")
                     st.rerun()
                 else:
