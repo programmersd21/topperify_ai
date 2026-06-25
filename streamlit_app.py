@@ -83,6 +83,19 @@ MODEL_COOKIE = "topperify_model"
 
 cookie_manager = stx.CookieManager(key="cookie_mgr")
 
+# Load cookies once per session
+if "cookies_loaded" not in st.session_state:
+    st.session_state["cookies_loaded"] = True
+    try:
+        cookies = cookie_manager.get_all()
+        if cookies:
+            if COOKIE_NAME in cookies:
+                st.session_state["gemini_api_key"] = cookies[COOKIE_NAME]
+            if MODEL_COOKIE in cookies:
+                st.session_state["selected_model"] = cookies[MODEL_COOKIE]
+    except:
+        pass
+
 MODEL_OPTIONS = {
     "gemini-3.1-flash-lite (Fastest)": "gemini-3.1-flash-lite",
     "gemma-4-26b-a4b-it (Deep Reasoning)": "gemma-4-26b-a4b-it",
@@ -91,16 +104,8 @@ MODEL_OPTIONS = {
 
 
 def load_api_key() -> str:
-    """Load API key from session state first, then cookie fallback."""
-    if st.session_state.get("gemini_api_key"):
-        return st.session_state["gemini_api_key"]
-    
-    cookies = cookie_manager.get_all()
-    if cookies and COOKIE_NAME in cookies:
-        key = cookies[COOKIE_NAME]
-        st.session_state["gemini_api_key"] = key
-        return key
-    return ""
+    """Load API key from session state."""
+    return st.session_state.get("gemini_api_key", "")
 
 
 def save_api_key(key: str):
@@ -117,16 +122,8 @@ def delete_api_key():
 
 
 def load_model_choice() -> str:
-    """Load saved model from cookie with session state fallback."""
-    if st.session_state.get("selected_model"):
-        return st.session_state["selected_model"]
-    
-    cookies = cookie_manager.get_all()
-    if cookies and MODEL_COOKIE in cookies:
-        model = cookies[MODEL_COOKIE]
-        st.session_state["selected_model"] = model
-        return model
-    return "gemini-3.1-flash-lite"
+    """Load saved model from session state."""
+    return st.session_state.get("selected_model", "gemini-3.1-flash-lite")
 
 
 def save_model_choice(model_key: str):
