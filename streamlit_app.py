@@ -76,48 +76,12 @@ def section_heading(icon: str, title: str, subtitle: str = ""):
     )
 
 
-# Cookie Manager (no caching - CookieManager is a widget)
-
-cookie_manager = stx.CookieManager()
+# Cookie Manager
 
 COOKIE_NAME = "topperify_gemini_key"
 MODEL_COOKIE = "topperify_model"
 
-
-def load_api_key() -> str:
-    """Load API key from session state first, then cookie fallback."""
-    session_key = st.session_state.get("gemini_api_key", "")
-    if session_key:
-        return session_key
-    try:
-        key = cookie_manager.get(COOKIE_NAME)
-        if key:
-            st.session_state["gemini_api_key"] = key
-            return key
-    except Exception:
-        pass
-    return ""
-
-
-def save_api_key(key: str):
-    """Save API key to session state + browser cookie (30-day expiry)."""
-    st.session_state["gemini_api_key"] = key
-    try:
-        expiry = datetime.now() + timedelta(days=30)
-        cookie_manager.set(COOKIE_NAME, key, expires_at=expiry)
-    except Exception:
-        pass
-
-
-def delete_api_key():
-    """Remove the stored API key from session state + cookie."""
-    st.session_state["gemini_api_key"] = ""
-    st.session_state["editing_key"] = False
-    try:
-        cookie_manager.delete(COOKIE_NAME)
-    except Exception:
-        pass
-
+cookie_manager = stx.CookieManager(key="cookie_mgr")
 
 MODEL_OPTIONS = {
     "gemini-3.1-flash-lite (Fastest)": "gemini-3.1-flash-lite",
@@ -126,29 +90,56 @@ MODEL_OPTIONS = {
 }
 
 
+def load_api_key() -> str:
+    """Load API key from session state first, then cookie fallback."""
+    if st.session_state.get("gemini_api_key"):
+        return st.session_state["gemini_api_key"]
+    
+    if not cookie_manager.ready():
+        return ""
+    
+    key = cookie_manager.get(COOKIE_NAME)
+    if key:
+        st.session_state["gemini_api_key"] = key
+        return key
+    return ""
+
+
+def save_api_key(key: str):
+    """Save API key to session state + browser cookie (30-day expiry)."""
+    st.session_state["gemini_api_key"] = key
+    if cookie_manager.ready():
+        cookie_manager.set(COOKIE_NAME, key, expires_at=datetime.now() + timedelta(days=30))
+
+
+def delete_api_key():
+    """Remove the stored API key from session state + cookie."""
+    st.session_state["gemini_api_key"] = ""
+    st.session_state["editing_key"] = False
+    if cookie_manager.ready():
+        cookie_manager.delete(COOKIE_NAME)
+
+
 def load_model_choice() -> str:
     """Load saved model from cookie with session state fallback."""
-    session_model = st.session_state.get("selected_model")
-    if session_model:
-        return session_model
-    try:
-        model = cookie_manager.get(MODEL_COOKIE)
-        if model:
-            st.session_state["selected_model"] = model
-            return model
-    except Exception:
-        pass
+    if st.session_state.get("selected_model"):
+        return st.session_state["selected_model"]
+    
+    if not cookie_manager.ready():
+        return "gemini-3.1-flash-lite"
+    
+    model = cookie_manager.get(MODEL_COOKIE)
+    if model:
+        st.session_state["selected_model"] = model
+        return model
     return "gemini-3.1-flash-lite"
 
 
 def save_model_choice(model_key: str):
     """Save model choice to cookie + session state."""
     st.session_state["selected_model"] = model_key
-    try:
-        expiry = datetime.now() + timedelta(days=30)
-        cookie_manager.set(MODEL_COOKIE, model_key, expires_at=expiry)
-    except Exception:
-        pass
+    if cookie_manager.ready():
+        cookie_manager.set(MODEL_COOKIE, model_key, expires_at=datetime.now() + timedelta(days=30))
 
 
 # API Key - Sidebar UI
