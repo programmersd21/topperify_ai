@@ -18,9 +18,10 @@ st.set_page_config(
 
 # Imports (after page config)
 
+import time  # noqa: E402
 from datetime import datetime, timedelta  # noqa: E402
 
-import extra_streamlit_components as stx  # noqa: E402
+from streamlit_cookies_controller import CookieController  # noqa: E402
 
 from utils.pdf_parser import extract_text_from_pdf, chunk_text  # noqa: E402
 from utils.gemini_processor import generate_notes  # noqa: E402
@@ -81,24 +82,29 @@ def section_heading(icon: str, title: str, subtitle: str = ""):
 COOKIE_NAME = "topperify_gemini_key"
 MODEL_COOKIE = "topperify_model"
 
-cookie_manager = stx.CookieManager(key="cookie_mgr")
+controller = CookieController(key="cookie_ctrl")
 
-# Load cookies with timeout to handle async loading
+# Hide the cookie controller iframe
+st.html("""
+<style>
+div[data-testid='element-container']:has(iframe[title='streamlit_cookies_controller.cookie_controller.cookie_controller']){
+    display:none;
+}
+</style>
+""")
+
+# Load cookies on first run with time.sleep for async loading
 if "cookies_loaded" not in st.session_state:
-    import time
-    start_time = time.time()
-    timeout = 2
+    cookies = controller.getAll()
+    time.sleep(1)  # Critical: wait for async cookie loading
     
-    while time.time() - start_time < timeout:
-        cookies = cookie_manager.get_all()
-        if cookies is not None:
-            st.session_state["cookies_loaded"] = True
-            if COOKIE_NAME in cookies:
-                st.session_state["gemini_api_key"] = cookies[COOKIE_NAME]
-            if MODEL_COOKIE in cookies:
-                st.session_state["selected_model"] = cookies[MODEL_COOKIE]
-            break
-        time.sleep(0.1)
+    if cookies:
+        if COOKIE_NAME in cookies:
+            st.session_state["gemini_api_key"] = cookies[COOKIE_NAME]
+        if MODEL_COOKIE in cookies:
+            st.session_state["selected_model"] = cookies[MODEL_COOKIE]
+    
+    st.session_state["cookies_loaded"] = True
 
 MODEL_OPTIONS = {
     "gemini-3.1-flash-lite (Fastest)": "gemini-3.1-flash-lite",
@@ -115,14 +121,14 @@ def load_api_key() -> str:
 def save_api_key(key: str):
     """Save API key to session state + browser cookie (30-day expiry)."""
     st.session_state["gemini_api_key"] = key
-    cookie_manager.set(COOKIE_NAME, key, expires_at=datetime.now() + timedelta(days=30))
+    controller.set(COOKIE_NAME, key, max_age=30*24*60*60)
 
 
 def delete_api_key():
     """Remove the stored API key from session state + cookie."""
     st.session_state["gemini_api_key"] = ""
     st.session_state["editing_key"] = False
-    cookie_manager.delete(COOKIE_NAME)
+    controller.remove(COOKIE_NAME)
 
 
 def load_model_choice() -> str:
@@ -133,7 +139,7 @@ def load_model_choice() -> str:
 def save_model_choice(model_key: str):
     """Save model choice to cookie + session state."""
     st.session_state["selected_model"] = model_key
-    cookie_manager.set(MODEL_COOKIE, model_key, expires_at=datetime.now() + timedelta(days=30))
+    controller.set(MODEL_COOKIE, model_key, max_age=30*24*60*60)
 
 
 # API Key - Sidebar UI
