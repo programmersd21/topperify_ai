@@ -93,16 +93,26 @@ div[data-testid='element-container']:has(iframe[title='streamlit_cookies_control
 </style>
 """)
 
-# Load cookies from browser on every page load
+# Try to load cookies - may need multiple attempts on first load
+if "_cookies_retry" not in st.session_state:
+    st.session_state["_cookies_retry"] = 0
+
 cookies = controller.getAll()
-time.sleep(1)  # Critical: wait for async cookie loading
+time.sleep(1)
 
-# Initialize session state from cookies if not already set
-if COOKIE_NAME in cookies and "gemini_api_key" not in st.session_state:
-    st.session_state["gemini_api_key"] = cookies[COOKIE_NAME]
+# If cookies is None/empty and we haven't retried yet, trigger a rerun
+if not cookies and st.session_state["_cookies_retry"] < 2:
+    st.session_state["_cookies_retry"] += 1
+    time.sleep(1)
+    st.rerun()
 
-if MODEL_COOKIE in cookies and "selected_model" not in st.session_state:
-    st.session_state["selected_model"] = cookies[MODEL_COOKIE]
+# Reset retry counter on successful cookie load
+if cookies:
+    st.session_state["_cookies_retry"] = 0
+    if COOKIE_NAME in cookies and "gemini_api_key" not in st.session_state:
+        st.session_state["gemini_api_key"] = cookies[COOKIE_NAME]
+    if MODEL_COOKIE in cookies and "selected_model" not in st.session_state:
+        st.session_state["selected_model"] = cookies[MODEL_COOKIE]
 
 MODEL_OPTIONS = {
     "gemini-3.1-flash-lite (Fastest)": "gemini-3.1-flash-lite",
@@ -119,14 +129,14 @@ def load_api_key() -> str:
 def save_api_key(key: str):
     """Save API key to session state + browser cookie (30-day expiry)."""
     st.session_state["gemini_api_key"] = key
-    controller.set(COOKIE_NAME, key, max_age=30*24*60*60)
+    controller.set(COOKIE_NAME, key, max_age=30*24*60*60, path='/')
 
 
 def delete_api_key():
     """Remove the stored API key from session state + cookie."""
     st.session_state["gemini_api_key"] = ""
     st.session_state["editing_key"] = False
-    controller.remove(COOKIE_NAME)
+    controller.remove(COOKIE_NAME, path='/')
 
 
 def load_model_choice() -> str:
@@ -137,7 +147,7 @@ def load_model_choice() -> str:
 def save_model_choice(model_key: str):
     """Save model choice to cookie + session state."""
     st.session_state["selected_model"] = model_key
-    controller.set(MODEL_COOKIE, model_key, max_age=30*24*60*60)
+    controller.set(MODEL_COOKIE, model_key, max_age=30*24*60*60, path='/')
 
 
 # API Key - Sidebar UI
