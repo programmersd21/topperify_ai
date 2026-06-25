@@ -93,18 +93,16 @@ div[data-testid='element-container']:has(iframe[title='streamlit_cookies_control
 </style>
 """)
 
-# Load cookies on first run with time.sleep for async loading
-if "cookies_loaded" not in st.session_state:
-    cookies = controller.getAll()
-    time.sleep(1)  # Critical: wait for async cookie loading
-    
-    if cookies:
-        if COOKIE_NAME in cookies:
-            st.session_state["gemini_api_key"] = cookies[COOKIE_NAME]
-        if MODEL_COOKIE in cookies:
-            st.session_state["selected_model"] = cookies[MODEL_COOKIE]
-    
-    st.session_state["cookies_loaded"] = True
+# Load cookies from browser on every page load
+cookies = controller.getAll()
+time.sleep(1)  # Critical: wait for async cookie loading
+
+# Initialize session state from cookies if not already set
+if COOKIE_NAME in cookies and "gemini_api_key" not in st.session_state:
+    st.session_state["gemini_api_key"] = cookies[COOKIE_NAME]
+
+if MODEL_COOKIE in cookies and "selected_model" not in st.session_state:
+    st.session_state["selected_model"] = cookies[MODEL_COOKIE]
 
 MODEL_OPTIONS = {
     "gemini-3.1-flash-lite (Fastest)": "gemini-3.1-flash-lite",
