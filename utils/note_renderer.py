@@ -1015,7 +1015,7 @@ def render_mindmap(mindmap_data: dict):
             label=root,
             size=35,
             color="#6366F1",
-            font={"color": "#FFFFFF", "size": 16, "face": "Inter"},
+            font={"color": "#FFFFFF", "size": 16, "face": "Arial, sans-serif"},
             shape="dot",
         )
     )
@@ -1040,7 +1040,7 @@ def render_mindmap(mindmap_data: dict):
                 label=branch,
                 size=25,
                 color=color,
-                font={"color": "#FFFFFF", "size": 14, "face": "Inter"},
+                font={"color": "#FFFFFF", "size": 14, "face": "Arial, sans-serif"},
                 shape="dot",
             )
         )
@@ -1058,7 +1058,7 @@ def render_mindmap(mindmap_data: dict):
                         font={
                             "color": "#F1F5F9",
                             "size": 11,
-                            "face": "Inter",
+                            "face": "Arial, sans-serif",
                         },
                         shape="dot",
                     )
