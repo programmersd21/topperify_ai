@@ -488,7 +488,9 @@ def generate_revision_pdf(
 
 
 def generate_mindmap_png(mindmap_data: dict) -> bytes:
-    """Generate mindmap PNG using Plotly."""
+    """Generate mindmap PNG using Playwright (instead of Kaleido)."""
+    import asyncio
+
     root = mindmap_data.get("root", "Topic") if mindmap_data else "Topic"
     children = mindmap_data.get("children", {}) if mindmap_data else {}
 
@@ -552,13 +554,22 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
         width=1200,
         height=800,
     )
-    
-    # Set Kaleido to use Playwright's Chromium
-    chromium_path = os.path.expanduser("~/.cache/ms-playwright/chromium-1223/chrome-linux/chrome")
-    if os.path.exists(chromium_path):
-        os.environ["PLOTLY_KALEIDO_CHROME_PATH"] = chromium_path
-    
-    return fig.to_image(format="png", scale=2)
+
+    # Use Playwright to capture PNG instead of Kaleido
+    html = fig.to_html(include_plotlyjs="cdn")
+
+    async def capture_png():
+        from playwright.async_api import async_playwright
+
+        async with async_playwright() as p:
+            browser = await p.chromium.launch()
+            page = await browser.new_page(viewport={"width": 1200, "height": 800})
+            await page.set_content(html, wait_until="networkidle")
+            screenshot = await page.screenshot(type="png", full_page=True)
+            await browser.close()
+            return screenshot
+
+    return asyncio.run(capture_png())
 
 
 def generate_all_zip(data: dict) -> bytes:

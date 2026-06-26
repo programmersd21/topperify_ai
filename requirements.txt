@@ -4,6 +4,5 @@ PyMuPDF>=1.23.0
 playwright>=1.40.0
 streamlit-agraph>=0.0.45
 plotly>=5.18.0
-kaleido>=0.2.1
 pandas>=2.0.0
 streamlit-cookies-controller>=0.0.4
