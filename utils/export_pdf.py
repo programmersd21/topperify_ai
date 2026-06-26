@@ -11,8 +11,9 @@ from datetime import datetime
 import plotly.graph_objects as go
 
 # Auto-install Playwright browsers on first import (for Streamlit Cloud)
+# Use --no-shell to avoid sudo requirement since deps are in packages.txt
 if not os.path.exists(os.path.expanduser("~/.cache/ms-playwright")):
-    os.system("playwright install --with-deps chromium")
+    os.system("playwright install --no-shell chromium")
 
 
 def _html_template(content: str, title: str) -> str:
