@@ -500,10 +500,8 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
         "#F59E0B", "#EF4444", "#06B6D4", "#84CC16",
     ]
 
-    W, H = 1200, 850
-    PAD = 30
-    TITLE_H = 50
-    cx, cy = W / 2, (H + TITLE_H) / 2
+    PAD = 40
+    TITLE_H = 55
 
     def _text_width(text: str, font_size: int) -> int:
         return int(len(text) * font_size * 0.6 + font_size * 2)
@@ -521,7 +519,7 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
 
     root_tw = _text_width(root, 16)
     root_r = max(36, root_tw // 2 + 10)
-    nodes: list[Node] = [Node(root, cx, cy, root_r, "#6366F1", 16)]
+    nodes: list[Node] = [Node(root, 0.0, 0.0, root_r, "#6366F1", 16)]
     node_map: dict[str, Node] = {root: nodes[0]}
 
     branches = list(children.items())
@@ -533,9 +531,6 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
         br = max(26, tw // 2 + 8)
         branch_nodes_info.append((branch, tw, br))
 
-    max_br = max(info[2] for info in branch_nodes_info) if branch_nodes_info else 30
-    branch_orbit: float = root_r + max_br + 20
-
     leaf_info: dict[str, tuple[str, int, int]] = {}
     for branch, leaves in branches:
         leaf_list = leaves if isinstance(leaves, list) else [str(leaves)]
@@ -544,37 +539,20 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
             lr = max(20, tw_l // 2 + 6)
             leaf_info[str(lf)] = (str(lf), tw_l, lr)
 
-    max_lr = max(info[2] for info in leaf_info.values()) if leaf_info else 22
-    leaf_orbit: float = max_br + max_lr + 12
-    max_dist_from_center = branch_orbit + leaf_orbit + max_lr
-
-    if max_dist_from_center > min(cx - PAD, cy - PAD):
-        scale = min(cx - PAD, cy - PAD) / max_dist_from_center
-        root_r = int(root_r * scale)
-        nodes[0].r = root_r
-        branch_orbit = int(branch_orbit * scale)
-        leaf_orbit = int(leaf_orbit * scale)
-        for idx, (branch, tw, br) in enumerate(branch_nodes_info):
-            branch_nodes_info[idx] = (branch, tw, int(br * scale))
-        max_br = max(info[2] for info in branch_nodes_info)
-        for key in leaf_info:
-            lbl, tw_l, lr = leaf_info[key]
-            leaf_info[key] = (lbl, tw_l, int(lr * scale))
-        max_lr = max(info[2] for info in leaf_info.values()) if leaf_info else 22
-
     for i, (branch, tw, br) in enumerate(branch_nodes_info):
         angle = (2 * math.pi * i) / n_branches - math.pi / 2
         color = branch_colors[i % len(branch_colors)]
 
-        bx = cx + branch_orbit * math.cos(angle)
-        by = cy + branch_orbit * math.sin(angle)
+        dist = root_r + br + 25
+        bx = dist * math.cos(angle)
+        by = dist * math.sin(angle)
         bnode = Node(branch, bx, by, br, color, 13)
         nodes.append(bnode)
         node_map[branch] = bnode
 
         leaf_list = children[branch] if isinstance(children[branch], list) else [str(children[branch])]
         n_leaves = len(leaf_list)
-        spread = min(0.5, 0.2 + 0.08 * n_leaves)
+        spread = min(0.6, 0.25 + 0.1 * n_leaves)
 
         for j, leaf in enumerate(leaf_list):
             leaf_label = str(leaf)
@@ -583,11 +561,29 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
             else:
                 la = angle + (j - (n_leaves - 1) / 2) * spread
             lr = leaf_info[leaf_label][2]
-            lx = bx + leaf_orbit * math.cos(la)
-            ly = by + leaf_orbit * math.sin(la)
+            leaf_dist = br + lr + 25
+            lx = bx + leaf_dist * math.cos(la)
+            ly = by + leaf_dist * math.sin(la)
             lnode = Node(leaf_label, lx, ly, lr, color, 11)
             nodes.append(lnode)
             node_map[leaf_label] = lnode
+
+    min_x = min(n.x - n.r for n in nodes)
+    max_x = max(n.x + n.r for n in nodes)
+    min_y = min(n.y - n.r for n in nodes)
+    max_y = max(n.y + n.r for n in nodes)
+
+    W = int(max_x - min_x + PAD * 2)
+    H = int(max_y - min_y + PAD * 2) + TITLE_H
+    W = max(W, 400)
+    H = max(H, 300)
+
+    offset_x = -min_x + PAD
+    offset_y = -min_y + PAD + TITLE_H
+
+    for n in nodes:
+        n.x += offset_x
+        n.y += offset_y
 
     edge_list: list[tuple[str, str, str]] = []
     for branch, _ in branches:
@@ -600,16 +596,15 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
     svg_edges = ""
     for src, dst, color in edge_list:
         sn, dn = node_map[src], node_map[dst]
-        svg_edges += f'<line x1="{sn.x}" y1="{sn.y}" x2="{dn.x}" y2="{dn.y}" stroke="{color}" stroke-width="2"/>\n'
+        svg_edges += f'<line x1="{sn.x:.1f}" y1="{sn.y:.1f}" x2="{dn.x:.1f}" y2="{dn.y:.1f}" stroke="{color}" stroke-width="2"/>\n'
 
     svg_nodes = ""
     for n in nodes:
-        txt_color = "white"
         svg_nodes += (
-            f'<circle cx="{n.x}" cy="{n.y}" r="{n.r}" '
+            f'<circle cx="{n.x:.1f}" cy="{n.y:.1f}" r="{n.r}" '
             f'fill="{n.color}" stroke="white" stroke-width="2" opacity="0.95"/>\n'
-            f'<text x="{n.x}" y="{n.y}" text-anchor="middle" dominant-baseline="central" '
-            f'fill="{txt_color}" font-family="Inter, sans-serif" font-size="{n.font_size}" '
+            f'<text x="{n.x:.1f}" y="{n.y:.1f}" text-anchor="middle" dominant-baseline="central" '
+            f'fill="white" font-family="Inter, sans-serif" font-size="{n.font_size}" '
             f'font-weight="600">{n.label}</text>\n'
         )
 
@@ -618,7 +613,7 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
   body {{ margin:0; background:#0B0F19; width:{W}px; height:{H}px; overflow:hidden; }}
-  .title {{ text-align:center; padding:16px 0 0; font:700 20px/1 Inter,sans-serif; color:#F1F5F9; }}
+  .title {{ text-align:center; padding:14px 0 0; font:700 20px/1 Inter,sans-serif; color:#F1F5F9; }}
 </style>
 </head><body>
 <div class="title"><b>{root}</b> — Mind Map</div>
