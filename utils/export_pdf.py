@@ -550,7 +550,7 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
         angle = (2 * math.pi * i) / n_branches - math.pi / 2
         color = branch_colors[i % len(branch_colors)]
 
-        dist = root_r + br + 25
+        dist = root_r + br + 80
         bx = dist * math.cos(angle)
         by = dist * math.sin(angle)
         bnode = Node(branch, bx, by, br, color, 13)
@@ -563,7 +563,7 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
             else [str(children[branch])]
         )
         n_leaves = len(leaf_list)
-        spread = min(0.6, 0.25 + 0.1 * n_leaves)
+        spread = min(0.7, 0.3 + 0.12 * n_leaves)
 
         for j, leaf in enumerate(leaf_list):
             leaf_label = str(leaf)
@@ -572,7 +572,7 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
             else:
                 la = angle + (j - (n_leaves - 1) / 2) * spread
             lr = leaf_info[leaf_label][2]
-            leaf_dist = br + lr + 25
+            leaf_dist = br + lr + 60
             lx = bx + leaf_dist * math.cos(la)
             ly = by + leaf_dist * math.sin(la)
             lnode = Node(leaf_label, lx, ly, lr, color, 11)
