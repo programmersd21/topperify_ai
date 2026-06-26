@@ -19,7 +19,6 @@ st.set_page_config(
 # Imports (after page config)
 
 import time  # noqa: E402
-from datetime import datetime, timedelta  # noqa: E402
 
 from streamlit_cookies_controller import CookieController  # noqa: E402
 
@@ -125,14 +124,14 @@ def load_api_key() -> str:
 def save_api_key(key: str):
     """Save API key to session state + browser cookie (30-day expiry)."""
     st.session_state["gemini_api_key"] = key
-    controller.set(COOKIE_NAME, key, max_age=30*24*60*60, path='/')
+    controller.set(COOKIE_NAME, key, max_age=30 * 24 * 60 * 60, path="/")
 
 
 def delete_api_key():
     """Remove the stored API key from session state + cookie."""
     st.session_state["gemini_api_key"] = ""
     st.session_state["editing_key"] = False
-    controller.remove(COOKIE_NAME, path='/')
+    controller.remove(COOKIE_NAME, path="/")
 
 
 def load_model_choice() -> str:
@@ -143,7 +142,7 @@ def load_model_choice() -> str:
 def save_model_choice(model_key: str):
     """Save model choice to cookie + session state."""
     st.session_state["selected_model"] = model_key
-    controller.set(MODEL_COOKIE, model_key, max_age=30*24*60*60, path='/')
+    controller.set(MODEL_COOKIE, model_key, max_age=30 * 24 * 60 * 60, path="/")
 
 
 # API Key - Sidebar UI
@@ -452,7 +451,9 @@ if "generated_data" in st.session_state:
     flashcards = data.get("flashcards", [])
     revision = data.get("revision_sheet", {})
     mindmap = data.get("mindmap", {})
-    has_rev = any(revision.get(k) for k in ["definitions", "facts", "formulas", "questions"])
+    has_rev = any(
+        revision.get(k) for k in ["definitions", "facts", "formulas", "questions"]
+    )
 
     try:
         # Prominent "Download All" button
@@ -479,7 +480,9 @@ if "generated_data" in st.session_state:
             if flashcards:
                 st.download_button(
                     label="🃏 Flashcards PDF",
-                    data=generate_flashcards_pdf(flashcards, data.get("chapter_title", "Flashcards")),
+                    data=generate_flashcards_pdf(
+                        flashcards, data.get("chapter_title", "Flashcards")
+                    ),
                     file_name=f"topperify_{chapter}_flashcards.pdf",
                     mime="application/pdf",
                     use_container_width=True,
@@ -490,7 +493,9 @@ if "generated_data" in st.session_state:
             if has_rev:
                 st.download_button(
                     label="📋 Revision PDF",
-                    data=generate_revision_pdf(revision, data.get("chapter_title", "Revision")),
+                    data=generate_revision_pdf(
+                        revision, data.get("chapter_title", "Revision")
+                    ),
                     file_name=f"topperify_{chapter}_revision.pdf",
                     mime="application/pdf",
                     use_container_width=True,

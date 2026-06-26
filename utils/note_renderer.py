@@ -1055,7 +1055,11 @@ def render_mindmap(mindmap_data: dict):
                         label=str(leaf),
                         size=15,
                         color=color,
-                        font={"color": "#F1F5F9", "size": 11, "face": "Instrument Serif"},
+                        font={
+                            "color": "#F1F5F9",
+                            "size": 11,
+                            "face": "Instrument Serif",
+                        },
                         shape="dot",
                     )
                 )

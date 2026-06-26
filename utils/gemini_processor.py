@@ -146,7 +146,9 @@ def _clean_json_response(raw: str) -> str:
     return text.strip()
 
 
-def generate_notes(text: str, api_key: str, model_name: str = "gemini-3.1-flash-lite") -> dict:
+def generate_notes(
+    text: str, api_key: str, model_name: str = "gemini-3.1-flash-lite"
+) -> dict:
     """
     Send extracted PDF text to Gemini and return structured notes as a dict.
     Shows a real-time progress bar driven by streaming chunks.
@@ -252,7 +254,9 @@ def generate_notes(text: str, api_key: str, model_name: str = "gemini-3.1-flash-
     try:
         status_text.text("🤖 Analyzing content...")
         response_text = _stream_and_collect(
-            model_name, contents, generate_content_config,
+            model_name,
+            contents,
+            generate_content_config,
         )
 
         progress_bar.progress(0.97)
@@ -300,7 +304,9 @@ def generate_notes(text: str, api_key: str, model_name: str = "gemini-3.1-flash-
         progress_bar.progress(0.1)
 
         response_text = _stream_and_collect(
-            model_name, retry_contents, generate_content_config,
+            model_name,
+            retry_contents,
+            generate_content_config,
         )
 
         progress_bar.progress(0.97)

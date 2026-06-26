@@ -1,304 +1,208 @@
 """
-Topperify AI - Premium Export
-Generates glorious PDF notes, flashcards, revision sheets, mindmap PNGs,
-and a ZIP bundle containing everything. All in-memory via io.BytesIO.
+Topperify AI - Modern HTML/CSS PDF Export
+Uses Playwright to render beautiful glassmorphism PDFs matching the UI.
 """
 
 import io
 import zipfile
 from datetime import datetime
-from pathlib import Path
 
 import plotly.graph_objects as go
-from reportlab.lib.colors import HexColor
-from reportlab.lib.enums import TA_CENTER
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.lib.units import mm
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import (
-    PageBreak,
-    Paragraph,
-    SimpleDocTemplate,
-    Spacer,
-    Table,
-    TableStyle,
-)
-
-# ── Premium Color Palette ──────────────────────────────────────────────────
-
-P = {
-    "bg": HexColor("#0B0F19"),
-    "bg_card": HexColor("#1A1A2E"),
-    "bg_section": HexColor("#141428"),
-    "text": HexColor("#F1F5F9"),
-    "text_muted": HexColor("#64748B"),
-    "primary": HexColor("#6366F1"),
-    "primary_glow": HexColor("#A5B4FC"),
-    "definition": HexColor("#60A5FA"),
-    "formula": HexColor("#A78BFA"),
-    "example": HexColor("#34D399"),
-    "tip": HexColor("#FBBF24"),
-    "memory": HexColor("#A3E635"),
-    "mistake": HexColor("#F87171"),
-    "concept": HexColor("#22D3EE"),
-    "accent_line": HexColor("#334155"),
-}
-
-# ── Font Registration (with fallback to Helvetica) ─────────────────────────
-
-FONTS_DIR = Path(__file__).resolve().parent.parent / "fonts"
-
-FONT_HEADING = "Helvetica-Bold"
-FONT_BODY = "Helvetica"
-FONT_MONO = "Courier"
-
-_heading_registered = False
-_body_registered = False
-_mono_registered = False
 
 
-def _register_fonts():
-    """Register Inter, Instrument Serif, Plus Jakarta Sans, GeistMono."""
-    global FONT_HEADING, FONT_BODY, FONT_MONO, _heading_registered, _body_registered, _mono_registered
-    if _heading_registered:
-        return
-
-    # --- Serif heading: Instrument Serif ---
-    iserif = FONTS_DIR / "InstrumentSerif-Regular.ttf"
-    iserif_i = FONTS_DIR / "InstrumentSerif-Italic.ttf"
-    if iserif.exists():
-        try:
-            pdfmetrics.registerFont(TTFont("InstrumentSerif", str(iserif)))
-            if iserif_i.exists():
-                pdfmetrics.registerFont(TTFont("InstrumentSerif-Italic", str(iserif_i)))
-                from reportlab.pdfbase.pdfmetrics import registerFontFamily
-                registerFontFamily(
-                    "InstrumentSerif",
-                    normal="InstrumentSerif",
-                    italic="InstrumentSerif-Italic",
-                    bold="InstrumentSerif",
-                    boldItalic="InstrumentSerif-Italic",
-                )
-            FONT_HEADING = "InstrumentSerif"
-        except Exception:
-            pass
-
-    # --- Body: Inter (variable font) ---
-    inter = FONTS_DIR / "Inter-Variable.ttf"
-    if inter.exists():
-        try:
-            pdfmetrics.registerFont(TTFont("Inter", str(inter)))
-            pdfmetrics.registerFont(TTFont("Inter-Bold", str(inter)))
-            from reportlab.pdfbase.pdfmetrics import registerFontFamily
-            registerFontFamily(
-                "Inter",
-                normal="Inter",
-                bold="Inter-Bold",
-                italic="Inter",
-                boldItalic="Inter-Bold",
-            )
-            FONT_BODY = "Inter"
-        except Exception:
-            pass
-
-    # --- Bold body: Plus Jakarta Sans 700 (for section titles) ---
-    pjs_bold = FONTS_DIR / "PlusJakartaSans-700Normal.ttf"
-    if pjs_bold.exists():
-        try:
-            pdfmetrics.registerFont(TTFont("PJS-Bold", str(pjs_bold)))
-        except Exception:
-            pass
-
-    # --- Monospace: GeistMono ---
-    geist_mono = FONTS_DIR / "GeistMono-Regular.ttf"
-    if geist_mono.exists():
-        try:
-            pdfmetrics.registerFont(TTFont("GeistMono", str(geist_mono)))
-            FONT_MONO = "GeistMono"
-        except Exception:
-            pass
-
-    _heading_registered = True
-    _body_registered = True
-    _mono_registered = True
-
-
-_register_fonts()
-
-
-# ── Style Builder ──────────────────────────────────────────────────────────
-
-
-def _build_styles():
-    styles = getSampleStyleSheet()
-
-    styles.add(ParagraphStyle(
-        name="CoverTitle", fontName="InstrumentSerif", fontSize=28, leading=34,
-        alignment=TA_CENTER, textColor=P["primary"], spaceAfter=8, tracking=100,
-    ))
-    styles.add(ParagraphStyle(
-        name="CoverSub", fontName="Inter", fontSize=13, leading=18,
-        alignment=TA_CENTER, textColor=P["text_muted"], spaceAfter=6,
-    ))
-    styles.add(ParagraphStyle(
-        name="CoverChapter", fontName="InstrumentSerif", fontSize=22, leading=28,
-        alignment=TA_CENTER, textColor=P["primary_glow"], spaceAfter=12, tracking=100,
-    ))
-    styles.add(ParagraphStyle(
-        name="SectionTitle", fontName="PJS-Bold", fontSize=15, leading=20,
-        textColor=P["primary"], spaceBefore=14, spaceAfter=6, tracking=100,
-    ))
-    styles.add(ParagraphStyle(
-        name="CardLabel", fontName="Inter", fontSize=7, leading=10,
-        textColor=P["primary_glow"], spaceAfter=1,
-    ))
-    styles.add(ParagraphStyle(
-        name="CardTitle", fontName="PJS-Bold", fontSize=10, leading=14,
-        textColor=P["text"], spaceAfter=2,
-    ))
-    styles.add(ParagraphStyle(
-        name="CardBody", fontName="Inter", fontSize=9, leading=13,
-        textColor=P["text_muted"], spaceAfter=6,
-    ))
-    styles.add(ParagraphStyle(
-        name="FooterText", fontName="Inter", fontSize=7, leading=10,
-        alignment=TA_CENTER, textColor=P["text_muted"],
-    ))
-    styles.add(ParagraphStyle(
-        name="BulletItem", fontName="Inter", fontSize=9, leading=13,
-        textColor=P["text_muted"], leftIndent=10, spaceAfter=3,
-    ))
-    styles.add(ParagraphStyle(
-        name="FlashcardQ", fontName="InstrumentSerif", fontSize=11, leading=15,
-        alignment=TA_CENTER, textColor=P["primary_glow"], spaceAfter=4,
-    ))
-    styles.add(ParagraphStyle(
-        name="FlashcardA", fontName="Inter", fontSize=9, leading=14,
-        alignment=TA_CENTER, textColor=P["text"], spaceAfter=6,
-    ))
-    return styles
-
-
-# ── Helpers ────────────────────────────────────────────────────────────────
-
-
-def _safe(text) -> str:
-    if not text:
-        return ""
-    s = str(text)
-    for ch, esc in [("&", "&amp;"), ("<", "&lt;"), (">", "&gt;")]:
-        s = s.replace(ch, esc)
-    return s
-
-
-def _section(elements, title: str, color: HexColor, styles):
-    elements.append(Spacer(1, 6 * mm))
-    # Thin accent line above section
-    elements.append(Table(
-        [[""]], colWidths=[170 * mm],
-        style=TableStyle([
-            ("LINEBELOW", (0, 0), (-1, -1), 1, color),
-            ("TOPPADDING", (0, 0), (-1, -1), 0),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-        ]),
-    ))
-    elements.append(Paragraph(
-        f'<font color="{color.hexval()}"><b>{_safe(title)}</b></font>',
-        styles["SectionTitle"],
-    ))
-
-
-def _card(elements, label: str, title: str, body: str, color: HexColor, styles):
-    """Dark glassmorphism card with colored left accent bar."""
-    inner = Table(
-        [
-            [Paragraph(
-                f'<font color="{color.hexval()}" size="7"><b>{_safe(label)}</b></font>',
-                styles["CardLabel"],
-            )],
-            [Paragraph(f"<b>{_safe(title)}</b>", styles["CardTitle"])] if title else [""],
-            [Paragraph(_safe(body), styles["CardBody"])] if body else [""],
-        ],
-        colWidths=[152 * mm],
-    )
-    inner.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 10),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 10),
-        ("TOPPADDING", (0, 0), (-1, -1), 5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-        ("BACKGROUND", (0, 0), (-1, -1), P["bg_card"]),
-    ]))
-
-    # Card with colored left bar
-    card = Table(
-        [["", inner]],
-        colWidths=[3 * mm, 165 * mm],
-    )
-    card.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (0, -1), color),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 0),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-        ("TOPPADDING", (0, 0), (-1, -1), 0),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-    ]))
-
-    elements.append(card)
-    elements.append(Spacer(1, 2.5 * mm))
+def _html_template(content: str, title: str) -> str:
+    """Premium dark glassmorphism HTML template."""
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>{title}</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=Plus+Jakarta+Sans:wght@700&family=Geist+Mono:wght@400&display=swap');
+        
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
+        
+        @page {{
+            size: A4;
+            margin: 15mm;
+        }}
+        
+        body {{
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #0B0F19 0%, #151B2C 100%);
+            color: #F1F5F9;
+            line-height: 1.6;
+            padding: 20px;
+        }}
+        
+        .cover {{
+            text-align: center;
+            padding: 80px 40px;
+            min-height: 70vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }}
+        
+        .cover-line {{
+            width: 120px;
+            height: 3px;
+            background: linear-gradient(90deg, #6366F1, #A5B4FC);
+            margin: 0 auto 20px;
+            border-radius: 2px;
+        }}
+        
+        .cover-title {{
+            font-family: 'Instrument Serif', Georgia, serif;
+            font-size: 36px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            background: linear-gradient(135deg, #6366F1, #A5B4FC);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 12px;
+        }}
+        
+        .cover-subtitle {{
+            font-size: 14px;
+            color: #64748B;
+            margin-bottom: 40px;
+            letter-spacing: 1px;
+        }}
+        
+        .cover-chapter {{
+            font-family: 'Instrument Serif', Georgia, serif;
+            font-size: 28px;
+            color: #A5B4FC;
+            margin-bottom: 30px;
+            letter-spacing: 1px;
+        }}
+        
+        .cover-meta {{
+            color: #64748B;
+            font-size: 13px;
+            margin: 20px 0;
+        }}
+        
+        .section {{
+            margin: 40px 0 20px;
+            page-break-before: auto;
+        }}
+        
+        .section-title {{
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 20px;
+            font-weight: 700;
+            color: #6366F1;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #334155;
+            letter-spacing: 1px;
+        }}
+        
+        .card {{
+            background: rgba(26, 26, 46, 0.7);
+            backdrop-filter: blur(20px);
+            border-radius: 12px;
+            padding: 20px;
+            margin: 16px 0;
+            border-left: 4px solid;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            page-break-inside: avoid;
+        }}
+        
+        .card.definition {{ border-left-color: #60A5FA; }}
+        .card.concept {{ border-left-color: #22D3EE; }}
+        .card.formula {{ border-left-color: #A78BFA; }}
+        .card.example {{ border-left-color: #34D399; }}
+        .card.tip {{ border-left-color: #FBBF24; }}
+        .card.memory {{ border-left-color: #A3E635; }}
+        .card.mistake {{ border-left-color: #F87171; }}
+        .card.flashcard {{ border-left-color: #6366F1; }}
+        
+        .card-label {{
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 8px;
+            opacity: 0.8;
+        }}
+        
+        .card.definition .card-label {{ color: #60A5FA; }}
+        .card.concept .card-label {{ color: #22D3EE; }}
+        .card.formula .card-label {{ color: #A78BFA; }}
+        .card.example .card-label {{ color: #34D399; }}
+        .card.tip .card-label {{ color: #FBBF24; }}
+        .card.memory .card-label {{ color: #A3E635; }}
+        .card.mistake .card-label {{ color: #F87171; }}
+        .card.flashcard .card-label {{ color: #A5B4FC; }}
+        
+        .card-title {{
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 16px;
+            font-weight: 700;
+            color: #F1F5F9;
+            margin-bottom: 10px;
+        }}
+        
+        .card-body {{
+            font-size: 14px;
+            color: #CBD5E1;
+            line-height: 1.7;
+        }}
+        
+        .footer {{
+            text-align: center;
+            color: #64748B;
+            font-size: 11px;
+            margin-top: 60px;
+            padding-top: 20px;
+            border-top: 1px solid #334155;
+        }}
+        
+        .bullet-item {{
+            padding: 12px 16px;
+            margin: 8px 0;
+            background: rgba(26, 26, 46, 0.5);
+            border-radius: 8px;
+            border-left: 3px solid #6366F1;
+        }}
+        
+        .flashcard-q {{
+            font-family: 'Instrument Serif', Georgia, serif;
+            font-size: 18px;
+            color: #A5B4FC;
+            margin-bottom: 12px;
+            text-align: center;
+        }}
+        
+        .flashcard-a {{
+            font-size: 14px;
+            color: #F1F5F9;
+            text-align: center;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #334155;
+        }}
+    </style>
+</head>
+<body>
+{content}
+</body>
+</html>"""
 
 
-def _build_doc(buffer, title: str):
-    def _draw_bg(canvas_obj, doc):
-        canvas_obj.saveState()
-        canvas_obj.setFillColor(P["bg"])
-        canvas_obj.rect(0, 0, A4[0], A4[1], fill=1, stroke=0)
-        canvas_obj.restoreState()
-
-    return SimpleDocTemplate(
-        buffer, pagesize=A4,
-        leftMargin=18 * mm, rightMargin=18 * mm,
-        topMargin=18 * mm, bottomMargin=18 * mm,
-        title=f"Topperify AI - {title}",
-        author="Topperify AI",
-        onFirstPage=_draw_bg,
-        onLaterPages=_draw_bg,
-    )
-
-
-def _cover_page(elements, data: dict, styles):
-    """Premium dark cover page with chapter info."""
-    elements.append(Spacer(1, 25 * mm))
-
-    # Decorative top line
-    elements.append(Table(
-        [[""]], colWidths=[40 * mm],
-        style=TableStyle([
-            ("LINEBELOW", (0, 0), (-1, -1), 2, P["primary"]),
-            ("TOPPADDING", (0, 0), (-1, -1), 0),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-        ]),
-    ))
-    elements.append(Spacer(1, 3 * mm))
-
-    elements.append(Paragraph('TOPPERIFY AI', styles["CoverTitle"]))
-    elements.append(Paragraph(
-        _safe(data.get("subject", "Study Notes")), styles["CoverSub"],
-    ))
-    elements.append(Spacer(1, 8 * mm))
-    elements.append(Paragraph(
-        _safe(data.get("chapter_title", "Untitled Chapter")),
-        styles["CoverChapter"],
-    ))
-
+def _cover_html(data: dict) -> str:
+    """Generate cover page HTML."""
     cover = data.get("cover_page", {})
-    tagline = cover.get("tagline", "")
-    if tagline:
-        elements.append(Paragraph(
-            f'<i>"{_safe(tagline)}"</i>', styles["CoverSub"],
-        ))
+    chapter = data.get("chapter_title", "Untitled Chapter")
+    subject = data.get("subject", "Study Notes")
 
     meta = []
     if cover.get("difficulty"):
@@ -307,402 +211,295 @@ def _cover_page(elements, data: dict, styles):
         meta.append(f"Study Time: {cover['study_time']}")
     if cover.get("exam_importance"):
         meta.append(f"Exam Importance: {cover['exam_importance']}")
-    if meta:
-        elements.append(Spacer(1, 5 * mm))
-        elements.append(Paragraph(" | ".join(meta), styles["CoverSub"]))
 
-    goals = cover.get("learning_goals", [])
-    if goals:
-        elements.append(Spacer(1, 6 * mm))
-        elements.append(Paragraph("<b>Learning Goals</b>", styles["CardTitle"]))
-        for g in goals:
-            elements.append(Paragraph(f"• {_safe(g)}", styles["BulletItem"]))
+    goals_html = ""
+    if cover.get("learning_goals"):
+        goals_html = "<div style='margin-top: 30px;'><h3 style='color: #F1F5F9; font-size: 16px; margin-bottom: 12px;'>Learning Goals</h3>"
+        for goal in cover.get("learning_goals", []):
+            goals_html += f"<div class='bullet-item'>• {goal}</div>"
+        goals_html += "</div>"
 
-    # Decorative bottom line
-    elements.append(Spacer(1, 8 * mm))
-    elements.append(Table(
-        [[""]], colWidths=[40 * mm],
-        style=TableStyle([
-            ("LINEBELOW", (0, 0), (-1, -1), 2, P["primary"]),
-            ("TOPPADDING", (0, 0), (-1, -1), 0),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-        ]),
-    ))
-
-    elements.append(PageBreak())
+    return f"""
+    <div class="cover">
+        <div class="cover-line"></div>
+        <h1 class="cover-title">TOPPERIFY AI</h1>
+        <p class="cover-subtitle">{subject}</p>
+        <h2 class="cover-chapter">{chapter}</h2>
+        {f'<p class="cover-meta">{" | ".join(meta)}</p>' if meta else ""}
+        {goals_html}
+        <div class="cover-line" style="margin-top: 40px;"></div>
+    </div>
+    <div style="page-break-after: always;"></div>
+    """
 
 
-def _footer(elements, styles):
-    elements.append(Spacer(1, 8 * mm))
-    elements.append(Paragraph(
-        f"Generated by Topperify AI - {datetime.now().strftime('%B %d, %Y')}",
-        styles["FooterText"],
-    ))
+def _sections_html(data: dict) -> str:
+    """Generate all content sections HTML."""
+    html = ""
+
+    # Definitions
+    definitions = data.get("definitions", [])
+    if definitions:
+        html += '<div class="section"><h2 class="section-title">Definitions</h2>'
+        for item in definitions:
+            html += f"""
+            <div class="card definition">
+                <div class="card-label">Definition</div>
+                <div class="card-title">{item.get("term", "")}</div>
+                <div class="card-body">{item.get("meaning", "")}</div>
+            </div>
+            """
+        html += "</div>"
+
+    # Key Concepts
+    concepts = data.get("key_concepts", [])
+    if concepts:
+        html += '<div class="section"><h2 class="section-title">Key Concepts</h2>'
+        for item in concepts:
+            html += f"""
+            <div class="card concept">
+                <div class="card-label">Concept</div>
+                <div class="card-title">{item.get("title", "")}</div>
+                <div class="card-body">{item.get("explanation", "")}</div>
+            </div>
+            """
+        html += "</div>"
+
+    # Formulas
+    formulas = data.get("formulas", [])
+    if formulas:
+        html += '<div class="section"><h2 class="section-title">Formulas</h2>'
+        for item in formulas:
+            html += f"""
+            <div class="card formula">
+                <div class="card-label">Formula</div>
+                <div class="card-title">{item.get("name", "")}</div>
+                <div class="card-body">{item.get("formula", "")} — {item.get("meaning", "")}</div>
+            </div>
+            """
+        html += "</div>"
+
+    # Examples
+    examples = data.get("examples", [])
+    if examples:
+        html += '<div class="section"><h2 class="section-title">Worked Examples</h2>'
+        for item in examples:
+            html += f"""
+            <div class="card example">
+                <div class="card-label">Example</div>
+                <div class="card-title">Q: {item.get("question", "")}</div>
+                <div class="card-body">A: {item.get("solution", "")}</div>
+            </div>
+            """
+        html += "</div>"
+
+    # Exam Tips
+    tips = [t for t in data.get("exam_tips", []) if t]
+    if tips:
+        html += '<div class="section"><h2 class="section-title">Exam Tips</h2>'
+        for tip in tips:
+            html += f"""
+            <div class="card tip">
+                <div class="card-label">Exam Tip</div>
+                <div class="card-body">{tip}</div>
+            </div>
+            """
+        html += "</div>"
+
+    # Memory Tricks
+    memory = [m for m in data.get("memory_tricks", []) if m]
+    if memory:
+        html += '<div class="section"><h2 class="section-title">Memory Tricks</h2>'
+        for trick in memory:
+            html += f"""
+            <div class="card memory">
+                <div class="card-label">Memory Trick</div>
+                <div class="card-body">{trick}</div>
+            </div>
+            """
+        html += "</div>"
+
+    # Common Mistakes
+    mistakes = [m for m in data.get("common_mistakes", []) if m]
+    if mistakes:
+        html += '<div class="section"><h2 class="section-title">Common Mistakes</h2>'
+        for mistake in mistakes:
+            html += f"""
+            <div class="card mistake">
+                <div class="card-label">Common Mistake</div>
+                <div class="card-body">{mistake}</div>
+            </div>
+            """
+        html += "</div>"
+
+    return html
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# 1. FULL NOTES PDF
-# ═══════════════════════════════════════════════════════════════════════════
+def _flashcards_html(flashcards: list[dict]) -> str:
+    """Generate flashcards section HTML."""
+    if not flashcards:
+        return ""
+
+    html = '<div style="page-break-before: always;"></div>'
+    html += '<div class="section"><h2 class="section-title">Flashcards</h2>'
+
+    for fc in flashcards:
+        html += f"""
+        <div class="card flashcard">
+            <div class="card-label">Flashcard</div>
+            <div class="flashcard-q"><strong>Q:</strong> {fc.get("question", "")}</div>
+            <div class="flashcard-a"><strong>A:</strong> {fc.get("answer", "")}</div>
+        </div>
+        """
+
+    html += "</div>"
+    return html
+
+
+def _revision_html(revision: dict) -> str:
+    """Generate revision sheet HTML."""
+    has_content = any(
+        revision.get(k) for k in ["definitions", "facts", "formulas", "questions"]
+    )
+    if not has_content:
+        return ""
+
+    html = '<div style="page-break-before: always;"></div>'
+    html += '<div class="section"><h2 class="section-title">Quick Revision Sheet</h2>'
+
+    sections = [
+        ("definitions", "Key Definitions"),
+        ("facts", "Important Facts"),
+        ("formulas", "Key Formulas"),
+        ("questions", "Important Questions"),
+    ]
+
+    for key, label in sections:
+        items = revision.get(key, [])
+        if items:
+            html += f'<h3 style="color: #A5B4FC; font-size: 16px; margin: 20px 0 12px;">{label}</h3>'
+            for item in items:
+                html += f'<div class="bullet-item">▸ {item}</div>'
+
+    html += "</div>"
+    return html
+
+
+def _footer_html() -> str:
+    """Generate footer HTML."""
+    return f"""
+    <div class="footer">
+        Generated by Topperify AI — {datetime.now().strftime("%B %d, %Y")}
+    </div>
+    """
+
+
+async def _render_pdf_async(html: str) -> bytes:
+    """Render HTML to PDF using Playwright."""
+    from playwright.async_api import async_playwright
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch()
+        page = await browser.new_page()
+        await page.set_content(html, wait_until="networkidle")
+
+        pdf_bytes = await page.pdf(
+            format="A4",
+            print_background=True,
+            margin={"top": "15mm", "right": "15mm", "bottom": "15mm", "left": "15mm"},
+        )
+
+        await browser.close()
+        return pdf_bytes
 
 
 def generate_notes_pdf(data: dict) -> bytes:
-    """Premium full notes PDF with all sections."""
-    buf = io.BytesIO()
-    styles = _build_styles()
-    doc = _build_doc(buf, data.get("chapter_title", "Notes"))
-    els: list = []
+    """Generate full notes PDF with glassmorphism styling."""
+    import asyncio
 
-    _cover_page(els, data, styles)
+    content = _cover_html(data)
+    content += _sections_html(data)
+    content += _flashcards_html(data.get("flashcards", []))
+    content += _revision_html(data.get("revision_sheet", {}))
+    content += _footer_html()
 
-    # Definitions
-    for item in data.get("definitions", []):
-        _card(els, "DEFINITION", item.get("term", ""), item.get("meaning", ""),
-              P["definition"], styles)
+    html = _html_template(content, data.get("chapter_title", "Notes"))
 
-    # Key Concepts
-    for item in data.get("key_concepts", []):
-        _card(els, "CONCEPT", item.get("title", ""), item.get("explanation", ""),
-              P["concept"], styles)
-
-    # Formulas
-    for item in data.get("formulas", []):
-        body = f"{item.get('formula', '')}  -  {item.get('meaning', '')}"
-        _card(els, "FORMULA", item.get("name", ""), body, P["formula"], styles)
-
-    # Examples
-    for item in data.get("examples", []):
-        body = f"A: {item.get('solution', '')}"
-        _card(els, "EXAMPLE", f"Q: {item.get('question', '')}", body,
-              P["example"], styles)
-
-    # Exam Tips
-    for tip in [t for t in data.get("exam_tips", []) if t]:
-        _card(els, "EXAM TIP", "", tip, P["tip"], styles)
-
-    # Memory Tricks
-    for t in [t for t in data.get("memory_tricks", []) if t]:
-        _card(els, "MEMORY TRICK", "", t, P["memory"], styles)
-
-    # Common Mistakes
-    for m in [m for m in data.get("common_mistakes", []) if m]:
-        _card(els, "COMMON MISTAKE", "", m, P["mistake"], styles)
-
-    # Important Questions
-    for q in [q for q in data.get("important_questions", []) if q]:
-        els.append(Paragraph(f"• {_safe(q)}", styles["BulletItem"]))
-
-    # Flashcards
-    flashcards = data.get("flashcards", [])
-    if flashcards:
-        els.append(PageBreak())
-        _section(els, "Flashcards", P["primary"], styles)
-        for fc in flashcards:
-            _card(els, "FLASHCARD",
-                  f"Q: {fc.get('question', '')}",
-                  f"A: {fc.get('answer', '')}",
-                  P["primary"], styles)
-
-    # Revision Sheet
-    rev = data.get("revision_sheet", {})
-    has_rev = any(rev.get(k) for k in ["definitions", "facts", "formulas", "questions"])
-    if has_rev:
-        els.append(PageBreak())
-        _section(els, "Quick Revision Sheet", P["primary"], styles)
-        for key, label in [
-            ("definitions", "Key Definitions"),
-            ("facts", "Important Facts"),
-            ("formulas", "Key Formulas"),
-            ("questions", "Important Questions"),
-        ]:
-            for item in rev.get(key, []):
-                els.append(Paragraph(f"▸ {_safe(item)}", styles["BulletItem"]))
-        els.append(Spacer(1, 3 * mm))
-
-    _footer(els, styles)
-    doc.build(els)
-    return buf.getvalue()
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# 2. FLASHCARDS PDF
-# ═══════════════════════════════════════════════════════════════════════════
+    return asyncio.run(_render_pdf_async(html))
 
 
 def generate_flashcards_pdf(flashcards: list[dict], title: str = "Flashcards") -> bytes:
-    """PDF containing only the flashcards in a clean Q&A layout."""
-    buf = io.BytesIO()
-    styles = _build_styles()
-    doc = _build_doc(buf, title)
-    els: list = []
+    """Generate flashcards-only PDF."""
+    import asyncio
 
-    els.append(Spacer(1, 15 * mm))
-    els.append(Paragraph('FLASHCARDS', styles["CoverTitle"]))
-    els.append(Paragraph(_safe(title), styles["CoverChapter"]))
-    els.append(Spacer(1, 8 * mm))
-    els.append(Table(
-        [[""]], colWidths=[50 * mm],
-        style=TableStyle([
-            ("LINEBELOW", (0, 0), (-1, -1), 2, P["primary"]),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-        ]),
-    ))
+    content = f"""
+    <div class="cover">
+        <div class="cover-line"></div>
+        <h1 class="cover-title">FLASHCARDS</h1>
+        <h2 class="cover-chapter">{title}</h2>
+        <div class="cover-line" style="margin-top: 40px;"></div>
+    </div>
+    <div style="page-break-after: always;"></div>
+    """
 
-    for i, fc in enumerate(flashcards):
-        if i > 0 and i % 4 == 0:
-            els.append(PageBreak())
+    content += '<div class="section">'
+    for fc in flashcards:
+        content += f"""
+        <div class="card flashcard">
+            <div class="card-label">Flashcard</div>
+            <div class="flashcard-q"><strong>Q:</strong> {fc.get("question", "")}</div>
+            <div class="flashcard-a"><strong>A:</strong> {fc.get("answer", "")}</div>
+        </div>
+        """
+    content += "</div>"
+    content += _footer_html()
 
-        q = fc.get("question", "")
-        a = fc.get("answer", "")
-        if not q and not a:
-            continue
-
-        # Front: question
-        card_data = Table(
-            [
-                [Paragraph(
-                    f'<font color="{P["primary_glow"].hexval()}"><b>Q</b></font>',
-                    styles["CardLabel"],
-                )],
-                [Paragraph(f"<b>{_safe(q)}</b>", styles["FlashcardQ"])],
-                [Spacer(1, 2 * mm)],
-                [Paragraph(
-                    f'<font color="{P["primary"].hexval()}" size="7">ANSWER</font>',
-                    styles["CardLabel"],
-                )],
-                [Paragraph(_safe(a), styles["FlashcardA"])],
-            ],
-            colWidths=[160 * mm],
-        )
-        card_data.setStyle(TableStyle([
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 12),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 12),
-            ("TOPPADDING", (0, 0), (-1, -1), 8),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-            ("BACKGROUND", (0, 0), (-1, -1), P["bg_card"]),
-            ("ROUNDEDCORNERS", [6, 6, 6, 6]),
-        ]))
-        els.append(card_data)
-        els.append(Spacer(1, 3 * mm))
-
-    _footer(els, styles)
-    doc.build(els)
-    return buf.getvalue()
+    html = _html_template(content, title)
+    return asyncio.run(_render_pdf_async(html))
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# 3. REVISION SHEET PDF
-# ═══════════════════════════════════════════════════════════════════════════
+def generate_revision_pdf(
+    revision_data: dict, chapter_title: str = "Revision"
+) -> bytes:
+    """Generate revision sheet PDF."""
+    import asyncio
 
+    content = f"""
+    <div class="cover">
+        <div class="cover-line"></div>
+        <h1 class="cover-title">QUICK REVISION</h1>
+        <h2 class="cover-chapter">{chapter_title}</h2>
+        <div class="cover-line" style="margin-top: 40px;"></div>
+    </div>
+    <div style="page-break-after: always;"></div>
+    """
 
-def generate_revision_pdf(revision_data: dict, chapter_title: str = "Revision") -> bytes:
-    """Compact revision sheet PDF with definitions, facts, formulas, questions."""
-    buf = io.BytesIO()
-    styles = _build_styles()
-    doc = _build_doc(buf, f"Revision - {chapter_title}")
-    els: list = []
+    content += _revision_html(revision_data)
+    content += _footer_html()
 
-    els.append(Spacer(1, 15 * mm))
-    els.append(Paragraph('QUICK REVISION', styles["CoverTitle"]))
-    els.append(Paragraph(_safe(chapter_title), styles["CoverChapter"]))
-    els.append(Spacer(1, 6 * mm))
-    els.append(Table(
-        [[""]], colWidths=[50 * mm],
-        style=TableStyle([
-            ("LINEBELOW", (0, 0), (-1, -1), 2, P["primary"]),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-        ]),
-    ))
-    els.append(Spacer(1, 4 * mm))
-
-    sections = [
-        ("definitions", "Key Definitions", P["definition"]),
-        ("facts", "Important Facts", P["example"]),
-        ("formulas", "Key Formulas", P["formula"]),
-        ("questions", "Important Questions", P["tip"]),
-    ]
-
-    for key, label, color in sections:
-        items = revision_data.get(key, [])
-        if not items:
-            continue
-        _section(els, label, color, styles)
-        for item in items:
-            # Mini card per item
-            row = Table(
-                [[Paragraph(f"▸ {_safe(item)}", styles["BulletItem"])]],
-                colWidths=[162 * mm],
-            )
-            row.setStyle(TableStyle([
-                ("BACKGROUND", (0, 0), (-1, -1), P["bg_card"]),
-                ("LEFTPADDING", (0, 0), (-1, -1), 10),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 10),
-                ("TOPPADDING", (0, 0), (-1, -1), 5),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-                ("LEFTPADDING", (0, 0), (-1, -1), 8),
-            ]))
-            els.append(row)
-            els.append(Spacer(1, 1.5 * mm))
-
-    _footer(els, styles)
-    doc.build(els)
-    return buf.getvalue()
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# 4. MINDMAP PNG
-# ═══════════════════════════════════════════════════════════════════════════
+    html = _html_template(content, f"Revision - {chapter_title}")
+    return asyncio.run(_render_pdf_async(html))
 
 
 def generate_mindmap_png(mindmap_data: dict) -> bytes:
-    """Render mindmap as a premium PNG matching the UI's streamlit-agraph graph."""
+    """Generate mindmap PNG using Plotly."""
     root = mindmap_data.get("root", "Topic") if mindmap_data else "Topic"
     children = mindmap_data.get("children", {}) if mindmap_data else {}
 
-    try:
-        import networkx as nx
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-    except ImportError:
-        return _kaleido_fallback(root, children)
-
-    if not children:
-        return _kaleido_fallback(root, children)
-
-    BG = "#0B0F19"
-    BRANCH_COLORS = [
-        "#3B82F6", "#8B5CF6", "#10B981", "#F59E0B",
-        "#EF4444", "#06B6D4", "#84CC16", "#EC4899",
-    ]
-
-    G = nx.Graph()
-    G.add_node(root, color="#6366F1", size=900, node_type="root")
-
-    for i, (branch, leaves) in enumerate(children.items()):
-        color = BRANCH_COLORS[i % len(BRANCH_COLORS)]
-        G.add_node(branch, color=color, size=450, node_type="branch")
-        G.add_edge(root, branch, color=color, width=2.0)
-
-        if isinstance(leaves, list):
-            for leaf in leaves:
-                leaf_id = f"{branch}_{leaf}"
-                G.add_node(leaf_id, label=str(leaf), color=color, size=150, node_type="leaf")
-                G.add_edge(branch, leaf_id, color=color, width=0.8)
-
-    fig, ax = plt.subplots(figsize=(10, 6), facecolor=BG)
-    ax.set_facecolor(BG)
-    ax.set_xlim(-1.5, 1.5)
-    ax.set_ylim(-1.1, 1.1)
-    ax.axis("off")
-    fig.subplots_adjust(left=0.02, right=0.98, top=0.93, bottom=0.02)
-
-    title_font = None
-    label_font = None
-    leaf_font_obj = None
-    for fpath in [
-        FONTS_DIR / "Geist-Bold.ttf",
-        FONTS_DIR / "GeistMono-Regular.ttf",
-        FONTS_DIR / "PlusJakartaSans-500Normal.ttf",
-    ]:
-        if fpath.exists():
-            try:
-                from matplotlib import font_manager
-                font_manager.fontManager.addfont(str(fpath))
-            except Exception:
-                pass
-    try:
-        title_font = matplotlib.font_manager.FontProperties(fname=str(FONTS_DIR / "Geist-Bold.ttf"))
-        label_font = matplotlib.font_manager.FontProperties(fname=str(FONTS_DIR / "Geist-Bold.ttf"), size=10)
-        leaf_font_obj = matplotlib.font_manager.FontProperties(fname=str(FONTS_DIR / "PlusJakartaSans-500Normal.ttf"), size=8)
-    except Exception:
-        pass
-
-    ax.set_title(
-        f"{root}",
-        fontproperties=title_font,
-        fontsize=18,
-        fontweight="bold",
-        color="#F1F5F9",
-        pad=16,
-    )
-
-    pos = nx.spring_layout(G, k=1.8, iterations=80, seed=42, scale=1.0)
-
-    for u, v, data in G.edges(data=True):
-        x0, y0 = pos[u]
-        x1, y1 = pos[v]
-        ax.plot(
-            [x0, x1], [y0, y1],
-            color=data.get("color", "#334155"),
-            linewidth=data.get("width", 1.0),
-            alpha=0.5,
-            solid_capstyle="round",
-            zorder=1,
-        )
-
-    for node in G.nodes():
-        x, y = pos[node]
-        data = G.nodes[node]
-        color = data.get("color", "#6366F1")
-        size = data.get("size", 200)
-        ntype = data.get("node_type", "leaf")
-
-        ax.scatter(
-            x, y,
-            s=size,
-            c=color,
-            edgecolors="white",
-            linewidths=0.0,
-            alpha=0.95,
-            zorder=2,
-        )
-
-        label = data.get("label", node)
-        if ntype == "root":
-            fp = title_font or label_font
-            fs = 13
-            fw = "bold"
-            fc = "#FFFFFF"
-        elif ntype == "branch":
-            fp = label_font
-            fs = 10
-            fw = "bold"
-            fc = "#FFFFFF"
-        else:
-            fp = leaf_font_obj
-            fs = 8
-            fw = "normal"
-            fc = "#F1F5F9"
-
-        offset_y = 0.07 if ntype == "root" else 0.05 if ntype == "branch" else 0.04
-        ax.text(
-            x, y + offset_y,
-            label,
-            fontproperties=fp,
-            fontsize=fs,
-            fontweight=fw,
-            color=fc,
-            ha="center",
-            va="bottom",
-            zorder=3,
-        )
-
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=150, facecolor=BG, bbox_inches="tight", pad_inches=0.3)
-    plt.close(fig)
-    return buf.getvalue()
-
-
-def _kaleido_fallback(root: str, children: dict) -> bytes:
-    """Fallback using Plotly + kaleido when Pillow is unavailable."""
     labels = [root]
     parents = [""]
     values = [1]
     branch_colors = [
-        "#6366F1", "#3B82F6", "#8B5CF6", "#10B981",
-        "#F59E0B", "#EF4444", "#06B6D4", "#84CC16",
+        "#6366F1",
+        "#3B82F6",
+        "#8B5CF6",
+        "#10B981",
+        "#F59E0B",
+        "#EF4444",
+        "#06B6D4",
+        "#84CC16",
     ]
+
     for i, (branch, leaves) in enumerate(children.items()):
         labels.append(branch)
         parents.append(root)
@@ -718,29 +515,42 @@ def _kaleido_fallback(root: str, children: dict) -> bytes:
         color_map[branch] = branch_colors[i % len(branch_colors)]
     node_colors = [color_map.get(label, "#6366F1") for label in labels]
 
-    fig = go.Figure(go.Treemap(
-        labels=labels, parents=parents, values=values,
-        marker=dict(colors=node_colors),
-        textfont=dict(size=14, color="white"),
-        branchvalues="total",
-    ))
+    fig = go.Figure(
+        go.Treemap(
+            labels=labels,
+            parents=parents,
+            values=values,
+            marker=dict(colors=node_colors),
+            textfont=dict(
+                size=14,
+                color="white",
+                family="Inter, system-ui, -apple-system, sans-serif",
+            ),
+            branchvalues="total",
+        )
+    )
     fig.update_layout(
-        margin=dict(l=10, r=10, t=40, b=10),
+        margin=dict(l=10, r=10, t=60, b=10),
         paper_bgcolor="#0B0F19",
-        font=dict(color="white"),
-        title=dict(text=f"<b>{root}</b> - Mind Map", font=dict(size=20, color="#F1F5F9"), x=0.5, xanchor="center"),
-        width=900, height=600,
+        font=dict(color="white", family="Inter, system-ui, -apple-system, sans-serif"),
+        title=dict(
+            text=f"<b>{root}</b> - Mind Map",
+            font=dict(
+                size=20,
+                color="#F1F5F9",
+                family="Inter, system-ui, -apple-system, sans-serif",
+            ),
+            x=0.5,
+            xanchor="center",
+        ),
+        width=1200,
+        height=800,
     )
     return fig.to_image(format="png", scale=2)
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# 5. ZIP BUNDLE
-# ═══════════════════════════════════════════════════════════════════════════
-
-
 def generate_all_zip(data: dict) -> bytes:
-    """Generate a ZIP containing notes PDF, flashcards PDF, revision PDF, mindmap PNG."""
+    """Generate ZIP bundle with all exports."""
     buf = io.BytesIO()
     chapter = data.get("chapter_title", "notes").replace(" ", "_")
 
@@ -753,13 +563,16 @@ def generate_all_zip(data: dict) -> bytes:
         if flashcards:
             zf.writestr(
                 f"topperify_{chapter}_flashcards.pdf",
-                generate_flashcards_pdf(flashcards, data.get("chapter_title", "Flashcards")),
+                generate_flashcards_pdf(
+                    flashcards, data.get("chapter_title", "Flashcards")
+                ),
             )
 
         # Revision sheet
         revision = data.get("revision_sheet", {})
-        has_rev = any(revision.get(k) for k in ["definitions", "facts", "formulas", "questions"])
-        if has_rev:
+        if any(
+            revision.get(k) for k in ["definitions", "facts", "formulas", "questions"]
+        ):
             zf.writestr(
                 f"topperify_{chapter}_revision.pdf",
                 generate_revision_pdf(revision, data.get("chapter_title", "Revision")),
@@ -768,6 +581,8 @@ def generate_all_zip(data: dict) -> bytes:
         # Mindmap PNG
         mindmap = data.get("mindmap", {})
         if mindmap and mindmap.get("children"):
-            zf.writestr(f"topperify_{chapter}_mindmap.png", generate_mindmap_png(mindmap))
+            zf.writestr(
+                f"topperify_{chapter}_mindmap.png", generate_mindmap_png(mindmap)
+            )
 
     return buf.getvalue()

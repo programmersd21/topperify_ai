@@ -11,6 +11,7 @@ Turn any PDF into comprehensive, deeply detailed study notes. Upload a textbook 
 - **Interactive Mind Maps** - Visual hierarchy of topics for big-picture understanding
 - **Flashcards** - Active recall cards for self-testing
 - **Quick Revision Sheet** - Condensed reference with key definitions, facts, formulas, and questions
+- **Modern PDF Export** - Beautiful glassmorphism-styled PDFs rendered with Chromium (Playwright) supporting modern CSS features like backdrop-filter, gradients, rounded corners, and custom web fonts
 - **Multiple Export Formats** - Download individual PDFs (notes, flashcards, revision sheet), mind map PNG, or a single ZIP bundle with everything
 - **Premium Dark UI** - Apple/Linear-inspired glassmorphism design with smooth animations
 - **No Account Needed** - API key stored in your browser cookies, never on a server
@@ -30,7 +31,7 @@ flowchart TB
         PARSER["pdf_parser.py<br/>PyMuPDF extraction + chunking"]
         PROCESSOR["gemini_processor.py<br/>Gemini API client<br/>Streaming + progress/ETA"]
         RENDERER["note_renderer.py<br/>Card layout + animations + CSS"]
-        EXPORTER["export_pdf.py<br/>ReportLab PDF generation<br/>Plotly mindmap PNG<br/>ZIP bundle"]
+        EXPORTER["export_pdf.py<br/>Playwright HTML→PDF with modern CSS<br/>Plotly mindmap PNG<br/>ZIP bundle"]
     end
 
     subgraph EXTERNAL["External"]
@@ -53,7 +54,7 @@ flowchart TB
 - Python / Streamlit
 - Google Gemini 3.1 Flash Lite (streaming, thinking mode)
 - PyMuPDF (PDF text extraction)
-- ReportLab (PDF generation)
+- Playwright (Modern HTML/CSS to PDF with glassmorphism styling)
 - Plotly + Kaleido (mind map image export)
 - streamlit-agraph (interactive mind maps)
 - extra-streamlit-components (cookie-based API key persistence)
@@ -79,6 +80,7 @@ cd topperify_ai
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+playwright install chromium  # Install Chromium browser for PDF rendering
 streamlit run streamlit_app.py
 ```
 
@@ -88,7 +90,21 @@ streamlit run streamlit_app.py
 
 ## Deployment
 
-Push to GitHub and deploy on [Streamlit Community Cloud](https:s//share.streamlit.io). No config files needed - the app handles everything through the sidebar.
+### Streamlit Community Cloud
+
+1. Push to GitHub
+2. Deploy on [Streamlit Community Cloud](https://share.streamlit.io)
+3. The repository includes a `packages.txt` file with all required Playwright system dependencies
+4. Streamlit Cloud will automatically install Playwright browsers on deployment
+
+### Local Development
+
+After installing dependencies, run:
+```bash
+playwright install chromium
+```
+
+This downloads the Chromium browser needed for PDF rendering.
 
 ## Pre-existing Deployment
 
