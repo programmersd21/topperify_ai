@@ -9,7 +9,6 @@ import zipfile
 from datetime import datetime
 
 
-
 # Auto-install Playwright browsers on first import (for Streamlit Cloud)
 # Install chromium (not just headless-shell) - this includes both variants
 if not os.path.exists(os.path.expanduser("~/.cache/ms-playwright/chromium-1223")):
@@ -496,8 +495,14 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
     children = mindmap_data.get("children", {}) if mindmap_data else {}
 
     branch_colors = [
-        "#6366F1", "#3B82F6", "#8B5CF6", "#10B981",
-        "#F59E0B", "#EF4444", "#06B6D4", "#84CC16",
+        "#6366F1",
+        "#3B82F6",
+        "#8B5CF6",
+        "#10B981",
+        "#F59E0B",
+        "#EF4444",
+        "#06B6D4",
+        "#84CC16",
     ]
 
     PAD = 40
@@ -509,7 +514,9 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
     class Node:
         __slots__ = ("label", "x", "y", "r", "color", "font_size")
 
-        def __init__(self, label: str, x: float, y: float, r: float, color: str, font_size: int):
+        def __init__(
+            self, label: str, x: float, y: float, r: float, color: str, font_size: int
+        ):
             self.label = label
             self.x = x
             self.y = y
@@ -550,7 +557,11 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
         nodes.append(bnode)
         node_map[branch] = bnode
 
-        leaf_list = children[branch] if isinstance(children[branch], list) else [str(children[branch])]
+        leaf_list = (
+            children[branch]
+            if isinstance(children[branch], list)
+            else [str(children[branch])]
+        )
         n_leaves = len(leaf_list)
         spread = min(0.6, 0.25 + 0.1 * n_leaves)
 
@@ -616,7 +627,7 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
   .title {{ text-align:center; padding:14px 0 0; font:700 20px/1 Inter,sans-serif; color:#F1F5F9; }}
 </style>
 </head><body>
-<div class="title"><b>{root}</b> — Mind Map</div>
+<div class="title"><b>{root}</b> - Mind Map</div>
 <svg width="{W}" height="{H}" viewBox="0 0 {W} {H}" style="position:absolute;top:0;left:0;">
 {svg_edges}{svg_nodes}
 </svg>
@@ -643,6 +654,7 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
                 return screenshot
         finally:
             import os
+
             os.unlink(temp_path)
 
     return asyncio.run(capture_png())
