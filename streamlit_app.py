@@ -513,8 +513,8 @@ if "generated_data" in st.session_state:
                 )
             else:
                 st.button("🗺️ Mindmap", disabled=True, use_container_width=True)
-    except Exception:
-        st.warning("⚠️ Some exports failed. Your notes are still viewable above.")
+    except Exception as e:
+        st.error(f"⚠️ Export error: {str(e)}. Your notes are still viewable above.")
 
 elif uploaded_file is None:
     st.markdown("")
