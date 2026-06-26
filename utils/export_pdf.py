@@ -5,28 +5,14 @@ Uses Playwright to render beautiful glassmorphism PDFs matching the UI.
 
 import io
 import os
-import subprocess
 import zipfile
 from datetime import datetime
 
 import plotly.graph_objects as go
 
-
-def _ensure_playwright_browsers():
-    """Ensure Playwright browsers are installed (for Streamlit Cloud)."""
-    if not os.path.exists(os.path.expanduser("~/.cache/ms-playwright")):
-        try:
-            subprocess.run(
-                ["playwright", "install", "--with-deps", "chromium"],
-                check=True,
-                capture_output=True,
-            )
-        except Exception:
-            pass
-
-
-# Install browsers on first import
-_ensure_playwright_browsers()
+# Auto-install Playwright browsers on first import (for Streamlit Cloud)
+if not os.path.exists(os.path.expanduser("~/.cache/ms-playwright")):
+    os.system("playwright install --with-deps chromium")
 
 
 def _html_template(content: str, title: str) -> str:
