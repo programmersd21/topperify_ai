@@ -556,21 +556,34 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
     )
 
     # Use Playwright to capture PNG instead of Kaleido
-    html = fig.to_html(include_plotlyjs="inline")
+    html = fig.to_html(include_plotlyjs="inline", config={"responsive": False})
 
     async def capture_png():
+        import tempfile
         from playwright.async_api import async_playwright
 
-        async with async_playwright() as p:
-            browser = await p.chromium.launch()
-            page = await browser.new_page(viewport={"width": 1200, "height": 800})
-            await page.set_content(html)
-            # Wait for Plotly to fully render the chart
-            await page.wait_for_selector(".js-plotly-plot", timeout=15000)
-            await page.wait_for_timeout(1000)
-            screenshot = await page.screenshot(type="png")
-            await browser.close()
-            return screenshot
+        # Write HTML to temp file
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".html", delete=False, encoding="utf-8"
+        ) as f:
+            f.write(html)
+            temp_path = f.name
+
+        try:
+            async with async_playwright() as p:
+                browser = await p.chromium.launch()
+                page = await browser.new_page(viewport={"width": 1200, "height": 800})
+                await page.goto(f"file://{temp_path}", wait_until="networkidle")
+                # Wait for Plotly to render
+                await page.wait_for_selector(".js-plotly-plot", timeout=15000)
+                await page.wait_for_timeout(2000)
+                screenshot = await page.screenshot(type="png")
+                await browser.close()
+                return screenshot
+        finally:
+            import os
+
+            os.unlink(temp_path)
 
     return asyncio.run(capture_png())
 
