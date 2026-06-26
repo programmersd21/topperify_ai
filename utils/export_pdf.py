@@ -501,8 +501,14 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
     children = mindmap_data.get("children", {}) if mindmap_data else {}
 
     branch_colors = [
-        "#6366F1", "#3B82F6", "#8B5CF6", "#10B981",
-        "#F59E0B", "#EF4444", "#06B6D4", "#84CC16",
+        "#6366F1",
+        "#3B82F6",
+        "#8B5CF6",
+        "#10B981",
+        "#F59E0B",
+        "#EF4444",
+        "#06B6D4",
+        "#84CC16",
     ]
 
     PAD = 40
@@ -521,10 +527,12 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
         for lf in leaf_list:
             all_labels[str(lf)] = 11
 
-    measure_svg_parts = ['<!DOCTYPE html><html><head>']
+    measure_svg_parts = ["<!DOCTYPE html><html><head>"]
     measure_svg_parts.append(f'<link href="{FONT_CSS}" rel="stylesheet">')
-    measure_svg_parts.append('<style>body{margin:0;background:#0B0F19;}</style>')
-    measure_svg_parts.append('</head><body><svg id="m" xmlns="http://www.w3.org/2000/svg">')
+    measure_svg_parts.append("<style>body{margin:0;background:#0B0F19;}</style>")
+    measure_svg_parts.append(
+        '</head><body><svg id="m" xmlns="http://www.w3.org/2000/svg">'
+    )
     for lbl, fs in all_labels.items():
         safe = lbl.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         measure_svg_parts.append(
@@ -532,18 +540,19 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
             f'font-size="{fs}" font-weight="600" fill="white">{safe}</text>'
         )
     measure_svg_parts.append(
-        '<script>'
-        'document.fonts.ready.then(()=>{'
+        "<script>"
+        "document.fonts.ready.then(()=>{"
         'const texts=document.querySelectorAll("#m text");'
-        'const sizes={};'
-        'texts.forEach(t=>{sizes[t.textContent]=Math.ceil(t.getComputedTextLength());});'
-        'document.title=JSON.stringify(sizes);'
-        '});'
-        '</script></body></html>'
+        "const sizes={};"
+        "texts.forEach(t=>{sizes[t.textContent]=Math.ceil(t.getComputedTextLength());});"
+        "document.title=JSON.stringify(sizes);"
+        "});"
+        "</script></body></html>"
     )
     measure_html = "\n".join(measure_svg_parts)
 
     async def _measure_and_render() -> bytes:
+        import os
         import tempfile
         from playwright.async_api import async_playwright
 
@@ -557,7 +566,9 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
                 mf.write(measure_html)
                 m_path = mf.name
             try:
-                await m_page.goto(f"file:///{m_path.replace(os.sep, '/')}", wait_until="networkidle")
+                await m_page.goto(
+                    f"file:///{m_path.replace(os.sep, '/')}", wait_until="networkidle"
+                )
                 await m_page.evaluate("document.fonts.ready")
                 for _ in range(20):
                     await m_page.wait_for_timeout(250)
@@ -566,7 +577,6 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
                         break
                 text_widths: dict[str, int] = json.loads(title)
             finally:
-                import os
                 os.unlink(m_path)
             await m_page.close()
 
@@ -577,7 +587,14 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
             nodes_data: list[dict] = []
             node_map: dict[str, dict] = {}
 
-            root_node = {"label": root, "x": 0.0, "y": 0.0, "r": root_r, "color": "#6366F1", "fs": 16}
+            root_node = {
+                "label": root,
+                "x": 0.0,
+                "y": 0.0,
+                "r": root_r,
+                "color": "#6366F1",
+                "fs": 16,
+            }
             nodes_data.append(root_node)
             node_map[root] = root_node
 
@@ -602,7 +619,14 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
                 dist = root_r + br + 120
                 bx = dist * math.cos(angle)
                 by = dist * math.sin(angle)
-                bnode = {"label": branch, "x": bx, "y": by, "r": br, "color": color, "fs": 13}
+                bnode = {
+                    "label": branch,
+                    "x": bx,
+                    "y": by,
+                    "r": br,
+                    "color": color,
+                    "fs": 13,
+                }
                 nodes_data.append(bnode)
                 node_map[branch] = bnode
 
@@ -624,7 +648,14 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
                     leaf_dist = br + lr + 80
                     lx = bx + leaf_dist * math.cos(la)
                     ly = by + leaf_dist * math.sin(la)
-                    lnode = {"label": leaf_label, "x": lx, "y": ly, "r": lr, "color": color, "fs": 11}
+                    lnode = {
+                        "label": leaf_label,
+                        "x": lx,
+                        "y": ly,
+                        "r": lr,
+                        "color": color,
+                        "fs": 11,
+                    }
                     nodes_data.append(lnode)
                     node_map[leaf_label] = lnode
 
@@ -709,7 +740,6 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
                 await r_page.wait_for_timeout(2000)
                 screenshot = await r_page.screenshot(type="png")
             finally:
-                import os
                 os.unlink(r_path)
             await r_page.close()
             await browser.close()
