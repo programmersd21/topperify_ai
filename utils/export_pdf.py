@@ -487,177 +487,239 @@ def generate_revision_pdf(
 
 
 def generate_mindmap_png(mindmap_data: dict) -> bytes:
-    """Generate mindmap PNG as a node-edge network graph via Playwright."""
+    """Generate mindmap PNG as a node-edge network graph via Playwright.
+
+    Two-pass approach:
+    1. Render hidden text elements, measure exact widths via JS
+    2. Build final SVG with circles sized to match text exactly
+    """
     import asyncio
+    import json
     import math
 
     root = mindmap_data.get("root", "Topic") if mindmap_data else "Topic"
     children = mindmap_data.get("children", {}) if mindmap_data else {}
 
     branch_colors = [
-        "#6366F1",
-        "#3B82F6",
-        "#8B5CF6",
-        "#10B981",
-        "#F59E0B",
-        "#EF4444",
-        "#06B6D4",
-        "#84CC16",
+        "#6366F1", "#3B82F6", "#8B5CF6", "#10B981",
+        "#F59E0B", "#EF4444", "#06B6D4", "#84CC16",
     ]
 
     PAD = 40
-    TITLE_H = 55
+    TITLE_H = 60
 
-    def _text_width(text: str, font_size: int) -> int:
-        return int(len(text) * font_size * 0.6 + font_size * 2)
+    FONT_CSS = (
+        "https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1"
+        "&family=Inter:wght@400;600;700&display=swap"
+    )
 
-    class Node:
-        __slots__ = ("label", "x", "y", "r", "color", "font_size")
-
-        def __init__(
-            self, label: str, x: float, y: float, r: float, color: str, font_size: int
-        ):
-            self.label = label
-            self.x = x
-            self.y = y
-            self.r = r
-            self.color = color
-            self.font_size = font_size
-
-    root_tw = _text_width(root, 16)
-    root_r = max(36, root_tw // 2 + 10)
-    nodes: list[Node] = [Node(root, 0.0, 0.0, root_r, "#6366F1", 16)]
-    node_map: dict[str, Node] = {root: nodes[0]}
-
-    branches = list(children.items())
-    n_branches = len(branches) if branches else 1
-
-    branch_nodes_info: list[tuple[str, int, int]] = []
-    for branch, _ in branches:
-        tw = _text_width(branch, 13)
-        br = max(26, tw // 2 + 8)
-        branch_nodes_info.append((branch, tw, br))
-
-    leaf_info: dict[str, tuple[str, int, int]] = {}
-    for branch, leaves in branches:
+    all_labels: dict[str, int] = {}
+    all_labels[root] = 16
+    for branch, leaves in children.items():
+        all_labels[branch] = 13
         leaf_list = leaves if isinstance(leaves, list) else [str(leaves)]
         for lf in leaf_list:
-            tw_l = _text_width(str(lf), 11)
-            lr = max(20, tw_l // 2 + 6)
-            leaf_info[str(lf)] = (str(lf), tw_l, lr)
+            all_labels[str(lf)] = 11
 
-    for i, (branch, tw, br) in enumerate(branch_nodes_info):
-        angle = (2 * math.pi * i) / n_branches - math.pi / 2
-        color = branch_colors[i % len(branch_colors)]
-
-        dist = root_r + br + 80
-        bx = dist * math.cos(angle)
-        by = dist * math.sin(angle)
-        bnode = Node(branch, bx, by, br, color, 13)
-        nodes.append(bnode)
-        node_map[branch] = bnode
-
-        leaf_list = (
-            children[branch]
-            if isinstance(children[branch], list)
-            else [str(children[branch])]
+    measure_html_parts = ['<!DOCTYPE html><html><head>']
+    measure_html_parts.append(f'<link href="{FONT_CSS}" rel="stylesheet">')
+    measure_html_parts.append('<style>body{margin:0;background:#0B0F19;}')
+    for lbl, fs in all_labels.items():
+        safe = lbl.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        measure_html_parts.append(
+            f'.m-{hash(lbl) & 0xFFFFFF:06x}{{font:600 {fs}px Inter,sans-serif;'
+            f'position:absolute;visibility:hidden;white-space:nowrap;}}'
         )
-        n_leaves = len(leaf_list)
-        spread = min(0.7, 0.3 + 0.12 * n_leaves)
+    measure_html_parts.append('</style></head><body>')
+    for lbl, fs in all_labels.items():
+        safe = lbl.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        cls = f'm-{hash(lbl) & 0xFFFFFF:06x}'
+        measure_html_parts.append(f'<span class="{cls}" data-label="{safe}">{safe}</span>')
+    measure_html_parts.append(
+        '<script>'
+        'document.fonts.ready.then(()=>{'
+        'const spans=document.querySelectorAll("[data-label]");'
+        'const sizes={};'
+        'spans.forEach(s=>{const r=s.getBoundingClientRect();sizes[s.dataset.label]=Math.ceil(r.width);});'
+        'document.title=JSON.stringify(sizes);'
+        '});'
+        '</script></body></html>'
+    )
+    measure_html = "\n".join(measure_html_parts)
 
-        for j, leaf in enumerate(leaf_list):
-            leaf_label = str(leaf)
-            if n_leaves == 1:
-                la = angle
-            else:
-                la = angle + (j - (n_leaves - 1) / 2) * spread
-            lr = leaf_info[leaf_label][2]
-            leaf_dist = br + lr + 60
-            lx = bx + leaf_dist * math.cos(la)
-            ly = by + leaf_dist * math.sin(la)
-            lnode = Node(leaf_label, lx, ly, lr, color, 11)
-            nodes.append(lnode)
-            node_map[leaf_label] = lnode
-
-    min_x = min(n.x - n.r for n in nodes)
-    max_x = max(n.x + n.r for n in nodes)
-    min_y = min(n.y - n.r for n in nodes)
-    max_y = max(n.y + n.r for n in nodes)
-
-    W = int(max_x - min_x + PAD * 2)
-    H = int(max_y - min_y + PAD * 2) + TITLE_H
-    W = max(W, 400)
-    H = max(H, 300)
-
-    offset_x = -min_x + PAD
-    offset_y = -min_y + PAD + TITLE_H
-
-    for n in nodes:
-        n.x += offset_x
-        n.y += offset_y
-
-    edge_list: list[tuple[str, str, str]] = []
-    for branch, _ in branches:
-        edge_list.append((root, branch, node_map[branch].color))
-        leaf_list_v = children[branch]
-        if isinstance(leaf_list_v, list):
-            for lf in leaf_list_v:
-                edge_list.append((branch, str(lf), node_map[branch].color))
-
-    svg_edges = ""
-    for src, dst, color in edge_list:
-        sn, dn = node_map[src], node_map[dst]
-        svg_edges += f'<line x1="{sn.x:.1f}" y1="{sn.y:.1f}" x2="{dn.x:.1f}" y2="{dn.y:.1f}" stroke="{color}" stroke-width="2"/>\n'
-
-    svg_nodes = ""
-    for n in nodes:
-        svg_nodes += (
-            f'<circle cx="{n.x:.1f}" cy="{n.y:.1f}" r="{n.r}" '
-            f'fill="{n.color}" stroke="white" stroke-width="2" opacity="0.95"/>\n'
-            f'<text x="{n.x:.1f}" y="{n.y:.1f}" text-anchor="middle" dominant-baseline="central" '
-            f'fill="white" font-family="Inter, sans-serif" font-size="{n.font_size}" '
-            f'font-weight="600">{n.label}</text>\n'
-        )
-
-    html = f"""<!DOCTYPE html>
-<html><head>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-<style>
-  body {{ margin:0; background:#0B0F19; width:{W}px; height:{H}px; overflow:hidden; }}
-  .title {{ text-align:center; padding:14px 0 0; font:700 20px/1 Inter,sans-serif; color:#F1F5F9; }}
-</style>
-</head><body>
-<div class="title"><b>{root}</b> - Mind Map</div>
-<svg width="{W}" height="{H}" viewBox="0 0 {W} {H}" style="position:absolute;top:0;left:0;">
-{svg_edges}{svg_nodes}
-</svg>
-</body></html>"""
-
-    async def capture_png():
+    async def _measure_and_render() -> bytes:
         import tempfile
         from playwright.async_api import async_playwright
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".html", delete=False, encoding="utf-8"
-        ) as f:
-            f.write(html)
-            temp_path = f.name
+        async with async_playwright() as p:
+            browser = await p.chromium.launch()
 
-        try:
-            async with async_playwright() as p:
-                browser = await p.chromium.launch()
-                page = await browser.new_page(viewport={"width": W, "height": H})
-                await page.goto(f"file://{temp_path}", wait_until="networkidle")
-                await page.wait_for_timeout(1500)
-                screenshot = await page.screenshot(type="png")
-                await browser.close()
-                return screenshot
-        finally:
-            import os
+            m_page = await browser.new_page(viewport={"width": 1600, "height": 900})
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".html", delete=False, encoding="utf-8"
+            ) as mf:
+                mf.write(measure_html)
+                m_path = mf.name
+            try:
+                await m_page.goto(f"file://{m_path}", wait_until="networkidle")
+                await m_page.evaluate("document.fonts.ready")
+                for _ in range(20):
+                    await m_page.wait_for_timeout(250)
+                    title = await m_page.title()
+                    if title.startswith("{"):
+                        break
+                text_widths: dict[str, int] = json.loads(title)
+            finally:
+                import os
+                os.unlink(m_path)
+            await m_page.close()
 
-            os.unlink(temp_path)
+            def tw(label: str) -> int:
+                return text_widths.get(label, len(label) * 8)
 
-    return asyncio.run(capture_png())
+            root_r = tw(root) // 2 + 3
+            nodes_data: list[dict] = []
+            node_map: dict[str, dict] = {}
+
+            root_node = {"label": root, "x": 0.0, "y": 0.0, "r": root_r, "color": "#6366F1", "fs": 16}
+            nodes_data.append(root_node)
+            node_map[root] = root_node
+
+            branch_list = list(children.items())
+            n_branches = len(branch_list) if branch_list else 1
+
+            branch_info: list[tuple[str, int]] = []
+            for branch, _ in branch_list:
+                branch_info.append((branch, tw(branch)))
+
+            leaf_tw: dict[str, int] = {}
+            for _, leaves in branch_list:
+                leaf_list = leaves if isinstance(leaves, list) else [str(leaves)]
+                for lf in leaf_list:
+                    leaf_tw[str(lf)] = tw(str(lf))
+
+            for i, (branch, b_tw) in enumerate(branch_info):
+                angle = (2 * math.pi * i) / n_branches - math.pi / 2
+                color = branch_colors[i % len(branch_colors)]
+                br = b_tw // 2 + 3
+
+                dist = root_r + br + 120
+                bx = dist * math.cos(angle)
+                by = dist * math.sin(angle)
+                bnode = {"label": branch, "x": bx, "y": by, "r": br, "color": color, "fs": 13}
+                nodes_data.append(bnode)
+                node_map[branch] = bnode
+
+                leaf_list = (
+                    children[branch]
+                    if isinstance(children[branch], list)
+                    else [str(children[branch])]
+                )
+                n_leaves = len(leaf_list)
+                spread = min(0.65, 0.28 + 0.1 * n_leaves)
+
+                for j, leaf in enumerate(leaf_list):
+                    leaf_label = str(leaf)
+                    if n_leaves == 1:
+                        la = angle
+                    else:
+                        la = angle + (j - (n_leaves - 1) / 2) * spread
+                    lr = leaf_tw[leaf_label] // 2 + 3
+                    leaf_dist = br + lr + 80
+                    lx = bx + leaf_dist * math.cos(la)
+                    ly = by + leaf_dist * math.sin(la)
+                    lnode = {"label": leaf_label, "x": lx, "y": ly, "r": lr, "color": color, "fs": 11}
+                    nodes_data.append(lnode)
+                    node_map[leaf_label] = lnode
+
+            min_x = min(n["x"] - n["r"] for n in nodes_data)
+            max_x = max(n["x"] + n["r"] for n in nodes_data)
+            min_y = min(n["y"] - n["r"] for n in nodes_data)
+            max_y = max(n["y"] + n["r"] for n in nodes_data)
+
+            W = int(max_x - min_x + PAD * 2)
+            H = int(max_y - min_y + PAD * 2) + TITLE_H
+            W = max(W, 400)
+            H = max(H, 300)
+
+            off_x = -min_x + PAD
+            off_y = -min_y + PAD + TITLE_H
+            for n in nodes_data:
+                n["x"] += off_x
+                n["y"] += off_y
+
+            edge_list: list[tuple[str, str, str]] = []
+            for branch, _ in branch_list:
+                edge_list.append((root, branch, node_map[branch]["color"]))
+                leaf_list_v = children[branch]
+                if isinstance(leaf_list_v, list):
+                    for lf in leaf_list_v:
+                        edge_list.append((branch, str(lf), node_map[branch]["color"]))
+
+            svg_edges = ""
+            for src, dst, color in edge_list:
+                sn, dn = node_map[src], node_map[dst]
+                svg_edges += (
+                    f'<line x1="{sn["x"]:.1f}" y1="{sn["y"]:.1f}" '
+                    f'x2="{dn["x"]:.1f}" y2="{dn["y"]:.1f}" '
+                    f'stroke="{color}" stroke-width="2" opacity="0.6"/>\n'
+                )
+
+            svg_nodes = ""
+            for n in nodes_data:
+                cx_, cy_ = n["x"], n["y"]
+                r = n["r"]
+                fs = n["fs"]
+                font_family = "Inter, sans-serif"
+                svg_nodes += (
+                    f'<circle cx="{cx_:.1f}" cy="{cy_:.1f}" r="{r}" '
+                    f'fill="{n["color"]}" opacity="0.9"/>\n'
+                    f'<circle cx="{cx_:.1f}" cy="{cy_:.1f}" r="{r}" '
+                    f'fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="1.5"/>\n'
+                    f'<text x="{cx_:.1f}" y="{cy_:.1f}" text-anchor="middle" '
+                    f'dominant-baseline="central" fill="white" '
+                    f'font-family="{font_family}" font-size="{fs}" '
+                    f'font-weight="600">{n["label"]}</text>\n'
+                )
+
+            final_html = f"""<!DOCTYPE html>
+<html><head>
+<link href="{FONT_CSS}" rel="stylesheet">
+<style>
+  body {{ margin:0; background:#0B0F19; width:{W}px; height:{H}px; overflow:hidden; }}
+  .title {{
+    text-align:center; padding:14px 0 0;
+    font:400 22px/1 'Instrument Serif', Georgia, serif;
+    color:#F1F5F9; letter-spacing:0.02em;
+  }}
+  .title b {{ font-weight:400; }}
+</style>
+</head><body>
+<div class="title">{root} — Mind Map</div>
+<svg width="{W}" height="{H}" viewBox="0 0 {W} {H}" style="position:absolute;top:0;left:0;">
+{svg_edges}
+{svg_nodes}
+</svg>
+</body></html>"""
+
+            r_page = await browser.new_page(viewport={"width": W, "height": H})
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".html", delete=False, encoding="utf-8"
+            ) as rf:
+                rf.write(final_html)
+                r_path = rf.name
+            try:
+                await r_page.goto(f"file://{r_path}", wait_until="networkidle")
+                await r_page.wait_for_timeout(2000)
+                screenshot = await r_page.screenshot(type="png")
+            finally:
+                import os
+                os.unlink(r_path)
+            await r_page.close()
+            await browser.close()
+            return screenshot
+
+    return asyncio.run(_measure_and_render())
 
 
 def generate_all_zip(data: dict) -> bytes:
