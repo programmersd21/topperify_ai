@@ -496,7 +496,7 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
 
     labels = [root]
     parents = [""]
-    values = [1]
+    values = [0]
     branch_colors = [
         "#6366F1",
         "#3B82F6",
@@ -508,15 +508,26 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
         "#84CC16",
     ]
 
+    branch_indices: dict[str, int] = {}
+    total_leaves = 0
     for i, (branch, leaves) in enumerate(children.items()):
         labels.append(branch)
         parents.append(root)
-        values.append(len(leaves) if isinstance(leaves, list) else 1)
+        branch_indices[branch] = len(values)
+        values.append(0)
+        leaf_count = len(leaves) if isinstance(leaves, list) else 1
+        total_leaves += leaf_count
         if isinstance(leaves, list):
             for leaf in leaves:
                 labels.append(str(leaf))
                 parents.append(branch)
                 values.append(1)
+
+    for branch, idx in branch_indices.items():
+        branch_leaves = children[branch]
+        values[idx] = len(branch_leaves) if isinstance(branch_leaves, list) else 1
+
+    values[0] = total_leaves
 
     color_map = {root: "#6366F1"}
     for i, branch in enumerate(children.keys()):
