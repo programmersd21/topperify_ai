@@ -521,31 +521,27 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
         for lf in leaf_list:
             all_labels[str(lf)] = 11
 
-    measure_html_parts = ['<!DOCTYPE html><html><head>']
-    measure_html_parts.append(f'<link href="{FONT_CSS}" rel="stylesheet">')
-    measure_html_parts.append('<style>body{margin:0;background:#0B0F19;}')
+    measure_svg_parts = ['<!DOCTYPE html><html><head>']
+    measure_svg_parts.append(f'<link href="{FONT_CSS}" rel="stylesheet">')
+    measure_svg_parts.append('<style>body{margin:0;background:#0B0F19;}</style>')
+    measure_svg_parts.append('</head><body><svg id="m" xmlns="http://www.w3.org/2000/svg">')
     for lbl, fs in all_labels.items():
         safe = lbl.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        measure_html_parts.append(
-            f'.m-{hash(lbl) & 0xFFFFFF:06x}{{font:600 {fs}px Inter,sans-serif;'
-            f'position:absolute;visibility:hidden;white-space:nowrap;}}'
+        measure_svg_parts.append(
+            f'<text id="t-{hash(lbl) & 0xFFFF:04x}" font-family="Inter,sans-serif" '
+            f'font-size="{fs}" font-weight="600" fill="white">{safe}</text>'
         )
-    measure_html_parts.append('</style></head><body>')
-    for lbl, fs in all_labels.items():
-        safe = lbl.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        cls = f'm-{hash(lbl) & 0xFFFFFF:06x}'
-        measure_html_parts.append(f'<span class="{cls}" data-label="{safe}">{safe}</span>')
-    measure_html_parts.append(
+    measure_svg_parts.append(
         '<script>'
         'document.fonts.ready.then(()=>{'
-        'const spans=document.querySelectorAll("[data-label]");'
+        'const texts=document.querySelectorAll("#m text");'
         'const sizes={};'
-        'spans.forEach(s=>{const r=s.getBoundingClientRect();sizes[s.dataset.label]=Math.ceil(r.width);});'
+        'texts.forEach(t=>{sizes[t.textContent]=Math.ceil(t.getComputedTextLength());});'
         'document.title=JSON.stringify(sizes);'
         '});'
         '</script></body></html>'
     )
-    measure_html = "\n".join(measure_html_parts)
+    measure_html = "\n".join(measure_svg_parts)
 
     async def _measure_and_render() -> bytes:
         import tempfile
@@ -561,7 +557,7 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
                 mf.write(measure_html)
                 m_path = mf.name
             try:
-                await m_page.goto(f"file://{m_path}", wait_until="networkidle")
+                await m_page.goto(f"file:///{m_path.replace(os.sep, '/')}", wait_until="networkidle")
                 await m_page.evaluate("document.fonts.ready")
                 for _ in range(20):
                     await m_page.wait_for_timeout(250)
