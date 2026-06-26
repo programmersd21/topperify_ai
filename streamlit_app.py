@@ -464,6 +464,7 @@ if "generated_data" in st.session_state:
             mime="application/zip",
             use_container_width=True,
             type="primary",
+            key="download_all_zip",
         )
 
         # Individual downloads row
@@ -475,6 +476,7 @@ if "generated_data" in st.session_state:
                 file_name=f"topperify_{chapter}_notes.pdf",
                 mime="application/pdf",
                 use_container_width=True,
+                key="download_notes_pdf",
             )
         with dl_cols[1]:
             if flashcards:
@@ -486,9 +488,15 @@ if "generated_data" in st.session_state:
                     file_name=f"topperify_{chapter}_flashcards.pdf",
                     mime="application/pdf",
                     use_container_width=True,
+                    key="download_flashcards_pdf",
                 )
             else:
-                st.button("🃏 Flashcards", disabled=True, use_container_width=True)
+                st.button(
+                    "🃏 Flashcards",
+                    disabled=True,
+                    use_container_width=True,
+                    key="flashcards_disabled",
+                )
         with dl_cols[2]:
             if has_rev:
                 st.download_button(
@@ -499,9 +507,15 @@ if "generated_data" in st.session_state:
                     file_name=f"topperify_{chapter}_revision.pdf",
                     mime="application/pdf",
                     use_container_width=True,
+                    key="download_revision_pdf",
                 )
             else:
-                st.button("📋 Revision", disabled=True, use_container_width=True)
+                st.button(
+                    "📋 Revision",
+                    disabled=True,
+                    use_container_width=True,
+                    key="revision_disabled",
+                )
         with dl_cols[3]:
             if mindmap and mindmap.get("children"):
                 st.download_button(
@@ -510,9 +524,15 @@ if "generated_data" in st.session_state:
                     file_name=f"topperify_{chapter}_mindmap.png",
                     mime="image/png",
                     use_container_width=True,
+                    key="download_mindmap_png",
                 )
             else:
-                st.button("🗺️ Mindmap", disabled=True, use_container_width=True)
+                st.button(
+                    "🗺️ Mindmap",
+                    disabled=True,
+                    use_container_width=True,
+                    key="mindmap_disabled",
+                )
     except Exception as e:
         st.error(f"⚠️ Export error: {str(e)}. Your notes are still viewable above.")
 

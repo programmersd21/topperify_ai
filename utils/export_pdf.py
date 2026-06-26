@@ -565,10 +565,10 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
             browser = await p.chromium.launch()
             page = await browser.new_page(viewport={"width": 1200, "height": 800})
             await page.set_content(html)
-            # Wait for Plotly to render
-            await page.wait_for_timeout(2000)
-            await page.wait_for_selector(".plotly", timeout=10000)
-            screenshot = await page.screenshot(type="png", full_page=False)
+            # Wait for Plotly to fully render the chart
+            await page.wait_for_selector(".js-plotly-plot", timeout=15000)
+            await page.wait_for_timeout(1000)
+            screenshot = await page.screenshot(type="png")
             await browser.close()
             return screenshot
 
