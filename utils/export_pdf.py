@@ -552,6 +552,12 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
         width=1200,
         height=800,
     )
+    
+    # Set Kaleido to use Playwright's Chromium
+    chromium_path = os.path.expanduser("~/.cache/ms-playwright/chromium-1223/chrome-linux/chrome")
+    if os.path.exists(chromium_path):
+        os.environ["PLOTLY_KALEIDO_CHROME_PATH"] = chromium_path
+    
     return fig.to_image(format="png", scale=2)
 
 
