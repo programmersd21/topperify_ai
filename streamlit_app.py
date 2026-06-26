@@ -359,7 +359,7 @@ with upload_col2:
     uploaded_file = st.file_uploader(
         "📄 Upload your PDF",
         type=["pdf"],
-        help="Upload a textbook chapter, notes, or any educational PDF (max 50MB).",
+        help="Upload a textbook chapter, notes, or any educational PDF.",
         key="pdf_uploader",
     )
 
