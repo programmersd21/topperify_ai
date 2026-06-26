@@ -488,92 +488,149 @@ def generate_revision_pdf(
 
 
 def generate_mindmap_png(mindmap_data: dict) -> bytes:
-    """Generate mindmap PNG using Playwright (instead of Kaleido)."""
+    """Generate mindmap PNG as a node-edge network graph via Playwright."""
     import asyncio
+    import math
 
     root = mindmap_data.get("root", "Topic") if mindmap_data else "Topic"
     children = mindmap_data.get("children", {}) if mindmap_data else {}
 
-    labels = [root]
-    parents = [""]
-    values = [0]
     branch_colors = [
-        "#6366F1",
-        "#3B82F6",
-        "#8B5CF6",
-        "#10B981",
-        "#F59E0B",
-        "#EF4444",
-        "#06B6D4",
-        "#84CC16",
+        "#6366F1", "#3B82F6", "#8B5CF6", "#10B981",
+        "#F59E0B", "#EF4444", "#06B6D4", "#84CC16",
     ]
 
-    branch_indices: dict[str, int] = {}
-    total_leaves = 0
-    for i, (branch, leaves) in enumerate(children.items()):
-        labels.append(branch)
-        parents.append(root)
-        branch_indices[branch] = len(values)
-        values.append(0)
-        leaf_count = len(leaves) if isinstance(leaves, list) else 1
-        total_leaves += leaf_count
-        if isinstance(leaves, list):
-            for leaf in leaves:
-                labels.append(str(leaf))
-                parents.append(branch)
-                values.append(1)
+    def _node_size(text: str, font_size: int, padding: int = 20) -> int:
+        char_w = font_size * 0.6
+        return max(int(font_size * 3.5), int(len(text) * char_w + padding))
 
-    for branch, idx in branch_indices.items():
-        branch_leaves = children[branch]
-        values[idx] = len(branch_leaves) if isinstance(branch_leaves, list) else 1
+    positions: dict[str, tuple[float, float]] = {}
+    node_sizes: dict[str, int] = {}
+    node_colors_map: dict[str, str] = {}
+    edges: list[tuple[str, str, str]] = []
+    node_fonts: dict[str, int] = {}
 
-    values[0] = total_leaves
+    root_font = 14
+    branch_font = 11
+    leaf_font = 9
 
-    color_map = {root: "#6366F1"}
-    for i, branch in enumerate(children.keys()):
-        color_map[branch] = branch_colors[i % len(branch_colors)]
-    node_colors = [color_map.get(label, "#6366F1") for label in labels]
+    positions[root] = (0.0, 0.0)
+    node_sizes[root] = _node_size(root, root_font, padding=24)
+    node_colors_map[root] = "#6366F1"
+    node_fonts[root] = root_font
 
-    fig = go.Figure(
-        go.Treemap(
-            labels=labels,
-            parents=parents,
-            values=values,
-            marker=dict(colors=node_colors),
-            textfont=dict(
-                size=14,
-                color="white",
-                family="Inter, system-ui, -apple-system, sans-serif",
-            ),
-            branchvalues="total",
-        )
-    )
+    branches = list(children.items())
+    n_branches = len(branches) if branches else 1
+    branch_radius = 5.0
+    leaf_radius = 2.5
+
+    all_leaf_labels: list[str] = []
+
+    for i, (branch, leaves) in enumerate(branches):
+        angle = (2 * math.pi * i) / n_branches - math.pi / 2
+        bx = branch_radius * math.cos(angle)
+        by = branch_radius * math.sin(angle)
+        positions[branch] = (bx, by)
+        node_sizes[branch] = _node_size(branch, branch_font, padding=18)
+        color = branch_colors[i % len(branch_colors)]
+        node_colors_map[branch] = color
+        node_fonts[branch] = branch_font
+        edges.append((root, branch, color))
+
+        leaf_list = leaves if isinstance(leaves, list) else [str(leaves)]
+        n_leaves = len(leaf_list)
+        for j, leaf in enumerate(leaf_list):
+            leaf_label = str(leaf)
+            spread = 0.4
+            if n_leaves == 1:
+                la = angle
+            else:
+                la = angle + (j - (n_leaves - 1) / 2) * spread
+            lx = bx + leaf_radius * math.cos(la)
+            ly = by + leaf_radius * math.sin(la)
+            positions[leaf_label] = (lx, ly)
+            node_sizes[leaf_label] = _node_size(leaf_label, leaf_font, padding=14)
+            node_colors_map[leaf_label] = color
+            node_fonts[leaf_label] = leaf_font
+            edges.append((branch, leaf_label, color))
+            all_leaf_labels.append(leaf_label)
+
+    fig = go.Figure()
+
+    for src, dst, color in edges:
+        sx, sy = positions[src]
+        dx, dy = positions[dst]
+        fig.add_trace(go.Scatter(
+            x=[sx, dx], y=[sy, dy],
+            mode="lines",
+            line=dict(width=2, color=color),
+            hoverinfo="none",
+            showlegend=False,
+        ))
+
+    root_x, root_y = positions[root]
+    fig.add_trace(go.Scatter(
+        x=[root_x], y=[root_y],
+        mode="markers+text",
+        marker=dict(size=node_sizes[root], color=node_colors_map[root], line=dict(width=2, color="white")),
+        text=[root], textposition="middle center",
+        textfont=dict(size=node_fonts[root], color="white", family="Inter, sans-serif"),
+        hoverinfo="text", showlegend=False,
+    ))
+
+    for label in [b for b, _ in branches]:
+        nx_, ny_ = positions[label]
+        fig.add_trace(go.Scatter(
+            x=[nx_], y=[ny_],
+            mode="markers+text",
+            marker=dict(size=node_sizes[label], color=node_colors_map[label], line=dict(width=1.5, color="white")),
+            text=[label], textposition="middle center",
+            textfont=dict(size=node_fonts[label], color="white", family="Inter, sans-serif"),
+            hoverinfo="text", showlegend=False,
+        ))
+
+    if all_leaf_labels:
+        for lf_label in all_leaf_labels:
+            lx, ly = positions[lf_label]
+            fig.add_trace(go.Scatter(
+                x=[lx], y=[ly],
+                mode="markers+text",
+                marker=dict(
+                    size=node_sizes[lf_label], color=node_colors_map[lf_label],
+                    line=dict(width=1, color="rgba(255,255,255,0.4)"),
+                ),
+                text=[lf_label], textposition="middle center",
+                textfont=dict(size=node_fonts[lf_label], color="#F1F5F9", family="Inter, sans-serif"),
+                hoverinfo="text", showlegend=False,
+            ))
+
     fig.update_layout(
-        margin=dict(l=10, r=10, t=60, b=10),
         paper_bgcolor="#0B0F19",
-        font=dict(color="white", family="Inter, system-ui, -apple-system, sans-serif"),
+        plot_bgcolor="#0B0F19",
+        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, visible=False),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, visible=False, scaleanchor="x"),
+        margin=dict(l=20, r=20, t=60, b=20),
         title=dict(
-            text=f"<b>{root}</b> - Mind Map",
-            font=dict(
-                size=20,
-                color="#F1F5F9",
-                family="Inter, system-ui, -apple-system, sans-serif",
-            ),
-            x=0.5,
-            xanchor="center",
+            text=f"<b>{root}</b> — Mind Map",
+            font=dict(size=20, color="#F1F5F9", family="Inter, sans-serif"),
+            x=0.5, xanchor="center",
         ),
-        width=1200,
-        height=800,
+        width=1200, height=800,
+        showlegend=False,
     )
 
-    # Use Playwright to capture PNG instead of Kaleido
-    html = fig.to_html(include_plotlyjs="inline", config={"responsive": False})
+    html = (
+        '<html><head>'
+        '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">'
+        '</head><body style="margin:0;background:#0B0F19;">'
+        + fig.to_html(include_plotlyjs="inline", full_html=False, config={"responsive": False})
+        + '</body></html>'
+    )
 
     async def capture_png():
         import tempfile
         from playwright.async_api import async_playwright
 
-        # Write HTML to temp file
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".html", delete=False, encoding="utf-8"
         ) as f:
@@ -585,7 +642,6 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
                 browser = await p.chromium.launch()
                 page = await browser.new_page(viewport={"width": 1200, "height": 800})
                 await page.goto(f"file://{temp_path}", wait_until="networkidle")
-                # Wait for Plotly to render
                 await page.wait_for_selector(".js-plotly-plot", timeout=15000)
                 await page.wait_for_timeout(2000)
                 screenshot = await page.screenshot(type="png")
@@ -593,7 +649,6 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
                 return screenshot
         finally:
             import os
-
             os.unlink(temp_path)
 
     return asyncio.run(capture_png())
