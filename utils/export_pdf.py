@@ -556,7 +556,7 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
     )
 
     # Use Playwright to capture PNG instead of Kaleido
-    html = fig.to_html(include_plotlyjs="cdn")
+    html = fig.to_html(include_plotlyjs="inline")
 
     async def capture_png():
         from playwright.async_api import async_playwright
@@ -564,8 +564,11 @@ def generate_mindmap_png(mindmap_data: dict) -> bytes:
         async with async_playwright() as p:
             browser = await p.chromium.launch()
             page = await browser.new_page(viewport={"width": 1200, "height": 800})
-            await page.set_content(html, wait_until="networkidle")
-            screenshot = await page.screenshot(type="png", full_page=True)
+            await page.set_content(html)
+            # Wait for Plotly to render
+            await page.wait_for_timeout(2000)
+            await page.wait_for_selector(".plotly", timeout=10000)
+            screenshot = await page.screenshot(type="png", full_page=False)
             await browser.close()
             return screenshot
 
